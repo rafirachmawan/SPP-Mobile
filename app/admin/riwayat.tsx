@@ -1,9 +1,8 @@
-import { View, StyleSheet, ScrollView, Text } from "react-native";
-import AppHeader from "../../components/AppHeader";
-import { Badge, Card, H1, P } from "../../components/ui-kit";
-import { theme } from "../../components/theme";
+import React from "react";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
-export default function Riwayat() {
+export default function AdminRiwayatTab() {
   const data = [
     {
       id: "1",
@@ -29,63 +28,153 @@ export default function Riwayat() {
   ];
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg }}>
-      <AppHeader
-        title="Riwayat Pembayaran"
-        subtitle="Daftar pembayaran terakhir (dummy)."
-        chip="History"
+    <View style={{ flex: 1 }}>
+      <LinearGradient
+        colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
       />
 
-      <ScrollView contentContainerStyle={styles.wrap}>
-        <Card style={{ gap: 8 }}>
-          <H1>Ringkasan</H1>
-          <P>
-            Ini masih dummy. Nanti akan realtime dari Firebase + Spreadsheet.
-          </P>
-        </Card>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.brand}>SPP Mobile</Text>
+          <View style={styles.chip}>
+            <Text style={styles.chipText}>Cabang</Text>
+          </View>
+        </View>
+
+        <Text style={styles.title}>Riwayat Pembayaran</Text>
+        <Text style={styles.subtitle}>
+          Daftar pembayaran terakhir (dummy). Nanti realtime dari database.
+        </Text>
 
         {data.map((x) => (
-          <Card key={x.id} style={{ gap: 8 }}>
-            <View style={styles.topRow}>
+          <View key={x.id} style={styles.card}>
+            <View style={styles.rowBetween}>
               <Text style={styles.name}>{x.nama}</Text>
-              <Badge
-                label={x.status}
-                tone={x.status === "Lunas" ? "success" : "info"}
-              />
+              <View
+                style={[
+                  styles.badge,
+                  x.status === "Lunas" ? styles.badgeOk : styles.badgeInfo,
+                ]}
+              >
+                <Text style={styles.badgeText}>{x.status}</Text>
+              </View>
             </View>
+
             <Text style={styles.sub}>{x.bulan}</Text>
             <Text style={styles.money}>
               Rp {x.nominal.toLocaleString("id-ID")}
             </Text>
-          </Card>
+          </View>
         ))}
+
+        <View style={{ height: 10 }} />
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+  scroll: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 24,
     gap: 12,
   },
-  topRow: {
+
+  header: {
+    paddingHorizontal: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  brand: {
+    fontWeight: "900",
+    color: "#1D4ED8",
+    letterSpacing: 0.4,
+  },
+  chip: {
+    backgroundColor: "rgba(219,234,254,0.95)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(191,219,254,1)",
+  },
+  chipText: {
+    color: "#1E40AF",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
+  title: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#0F172A",
+    marginTop: 2,
+  },
+  subtitle: {
+    color: "#64748B",
+    lineHeight: 20,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+
+  card: {
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 2,
+  },
+  rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
   },
   name: {
     fontWeight: "900",
-    color: theme.text,
+    color: "#0F172A",
     fontSize: 16,
+    flex: 1,
   },
   sub: {
-    color: theme.sub,
+    marginTop: 8,
+    color: "#64748B",
+    fontWeight: "700",
   },
   money: {
+    marginTop: 6,
     fontWeight: "900",
-    color: theme.text,
+    color: "#0F172A",
     fontSize: 16,
+  },
+
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontWeight: "900",
+    fontSize: 12,
+  },
+  badgeOk: {
+    backgroundColor: "#DCFCE7",
+    borderColor: "#BBF7D0",
+  },
+  badgeInfo: {
+    backgroundColor: "#DBEAFE",
+    borderColor: "#BFDBFE",
   },
 });
