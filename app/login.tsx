@@ -16,28 +16,79 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
+// ✅ Firebase
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../firebase"; // ✅ sesuaikan path
+
 export default function Login() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(true);
+  const [remember, setRemember] = useState(true); // (ingat saya) UI tetap, logika bisa kamu pakai nanti
   const [showPass, setShowPass] = useState(false);
 
   const canSubmit = useMemo(() => {
     return email.trim().length > 0 && password.length > 0;
   }, [email, password]);
 
-  function onContinue() {
+  async function onContinue() {
     const e = email.trim().toLowerCase();
 
     if (!canSubmit)
       return Alert.alert("Gagal", "Email & password wajib diisi.");
 
-    // ✅ dummy role (nanti Firebase)
-    if (e.includes("super") || e === "superadmin")
+    try {
+      // 1) Login ke Firebase Auth
+      const cred = await signInWithEmailAndPassword(auth, e, password);
+      const uid = cred.user.uid;
+
+      // 2) Ambil role dari Firestore: users/{uid}
+      const snap = await getDoc(doc(db, "users", uid));
+      if (!snap.exists()) {
+        await signOut(auth);
+        return Alert.alert(
+          "Ditolak",
+          "Akun ini belum terdaftar sebagai SUPERADMIN di database."
+        );
+      }
+
+      const data = snap.data() as { role?: string; active?: boolean };
+
+      // 3) Cek aktif
+      if (data.active === false) {
+        await signOut(auth);
+        return Alert.alert("Ditolak", "Akun nonaktif.");
+      }
+
+      // 4) Hanya SUPERADMIN yang boleh masuk
+      if (data.role !== "SUPERADMIN") {
+        await signOut(auth);
+        return Alert.alert("Ditolak", "Akun ini bukan SUPERADMIN.");
+      }
+
+      // 5) Sukses
       return router.replace("/superadmin");
-    return router.replace("/admin");
+    } catch (err: any) {
+      const msg = String(err?.message || "Login gagal");
+
+      // Pesan lebih enak dibaca
+      if (
+        msg.includes("auth/invalid-credential") ||
+        msg.includes("auth/wrong-password")
+      ) {
+        return Alert.alert("Gagal", "Email atau password salah.");
+      }
+      if (msg.includes("auth/user-not-found")) {
+        return Alert.alert("Gagal", "Akun tidak ditemukan.");
+      }
+      if (msg.includes("auth/network-request-failed")) {
+        return Alert.alert("Koneksi", "Cek internet dulu.");
+      }
+
+      return Alert.alert("Gagal", msg);
+    }
   }
 
   const { height } = Dimensions.get("window");
@@ -71,14 +122,13 @@ export default function Login() {
             <Ionicons name="chevron-back" size={18} color="#0F172A" />
           </TouchableOpacity>
 
-          {/* Spacer atas (biar form lebih turun & rapi) */}
+          {/* Spacer atas */}
           <View style={{ height: isSmall ? 26 : 54 }} />
 
-          {/* Headline (lebih kids-friendly) */}
+          {/* Headline */}
           <Text style={styles.hi}>Shining Sun 🌤️</Text>
           <Text style={styles.desc}>Cerdas • Ceria • Kreatif • Mandiri </Text>
 
-          {/* Spacer supaya card agak kebawah tapi tidak bikin bawah kosong */}
           <View style={{ height: isSmall ? 14 : 26 }} />
 
           {/* Card */}
@@ -94,7 +144,7 @@ export default function Login() {
               <TextInput
                 value={email}
                 onChangeText={setEmail}
-                placeholder="contoh: admin"
+                placeholder="contoh: superadmin@spp.com"
                 placeholderTextColor="#94A3B8"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -129,7 +179,7 @@ export default function Login() {
               </TouchableOpacity>
             </View>
 
-            {/* Remember only */}
+            {/* Remember */}
             <View style={styles.rowBetween}>
               <View style={styles.row}>
                 <Switch
@@ -152,13 +202,11 @@ export default function Login() {
               <Text style={styles.primaryText}>Masuk</Text>
             </TouchableOpacity>
 
-            {/* Small note */}
             <Text style={styles.note}>
-              * Prototype UI — nanti login akan tersambung ke Firebase.
+              * Login SUPERADMIN tersambung Firebase Auth + Firestore.
             </Text>
           </View>
 
-          {/* Spacer bawah kecil supaya gak terlalu kosong */}
           <View style={{ height: isSmall ? 14 : 20 }} />
         </ScrollView>
       </KeyboardAvoidingView>
