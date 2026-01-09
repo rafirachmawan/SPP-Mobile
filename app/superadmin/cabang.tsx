@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,84 +12,158 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
+// ✅ Firebase
+import { auth, db } from "../../firebase"; // ✅ sesuaikan bila lokasi file berbeda
+import {
+  addDoc,
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+} from "firebase/firestore";
+
 type Cabang = {
-  id: string;
+  id: string; // doc id firestore
   nama: string;
   alamat?: string;
   aktif: boolean;
 };
 
 export default function CabangPage() {
-  const initial = useMemo<Cabang[]>(
-    () => [
-      {
-        id: "C1",
-        nama: "Shining Sun - Cabang A",
-        alamat: "Jl. Mawar 1",
-        aktif: true,
-      },
-      {
-        id: "C2",
-        nama: "Shining Sun - Cabang B",
-        alamat: "Jl. Melati 2",
-        aktif: true,
-      },
-      {
-        id: "C3",
-        nama: "Shining Sun - Cabang C",
-        alamat: "Jl. Kenanga 3",
-        aktif: true,
-      },
-    ],
-    []
-  );
+  const [items, setItems] = useState<Cabang[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [items, setItems] = useState<Cabang[]>(initial);
   const [q, setQ] = useState("");
   const [showForm, setShowForm] = useState(false);
 
   const [nama, setNama] = useState("");
   const [alamat, setAlamat] = useState("");
 
+  // ✅ mode edit
+  const [editId, setEditId] = useState<string | null>(null);
+
+  // ===================== LOAD REALTIME FROM FIRESTORE =====================
+  useEffect(() => {
+    const qRef = query(
+      collection(db, "branches"),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsub = onSnapshot(
+      qRef,
+      (snap) => {
+        const rows: Cabang[] = snap.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            nama: String(data.name || ""),
+            alamat: String(data.address || ""),
+            aktif: data.active !== false,
+          };
+        });
+
+        setItems(rows);
+        setLoading(false);
+      },
+      (err) => {
+        console.log("branches snapshot error:", err);
+        setLoading(false);
+        Alert.alert("Gagal", "Tidak bisa mengambil data cabang (cek rules).");
+      }
+    );
+
+    return () => unsub();
+  }, []);
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     if (!qq) return items;
-    return items.filter((x) => x.nama.toLowerCase().includes(qq));
+    return items.filter(
+      (x) =>
+        x.nama.toLowerCase().includes(qq) ||
+        (x.alamat || "").toLowerCase().includes(qq)
+    );
   }, [q, items]);
 
   function resetForm() {
     setNama("");
     setAlamat("");
+    setEditId(null);
   }
 
-  function onAdd() {
+  function openAddForm() {
+    resetForm();
+    setShowForm(true);
+  }
+
+  async function onSave() {
     const n = nama.trim();
+    const a = alamat.trim();
+
     if (!n) return Alert.alert("Gagal", "Nama cabang wajib diisi.");
 
-    const newItem: Cabang = {
-      id: `C${Date.now()}`,
-      nama: n,
-      alamat: alamat.trim() || "-",
-      aktif: true,
-    };
+    try {
+      const uid = auth.currentUser?.uid;
+      if (!uid) return Alert.alert("Gagal", "Belum login.");
 
-    setItems((prev) => [newItem, ...prev]);
-    setShowForm(false);
-    resetForm();
-    Alert.alert("Berhasil", "Cabang ditambahkan (dummy).");
+      // ✅ EDIT
+      if (editId) {
+        await updateDoc(doc(db, "branches", editId), {
+          name: n,
+          address: a || "-",
+          updatedAt: serverTimestamp(),
+          updatedBy: uid,
+        });
+
+        Alert.alert("Berhasil", "Cabang berhasil diupdate.");
+      } else {
+        // ✅ ADD
+        await addDoc(collection(db, "branches"), {
+          name: n,
+          address: a || "-",
+          active: true,
+          createdAt: serverTimestamp(),
+          createdBy: uid,
+        });
+
+        Alert.alert("Berhasil", "Cabang berhasil ditambahkan.");
+      }
+
+      setShowForm(false);
+      resetForm();
+    } catch (e: any) {
+      console.log("save branch error:", e);
+      Alert.alert("Gagal", e?.message || "Tidak bisa menyimpan cabang.");
+    }
   }
 
-  function onToggleAktif(id: string) {
-    setItems((prev) =>
-      prev.map((x) => (x.id === id ? { ...x, aktif: !x.aktif } : x))
-    );
+  async function onToggleAktif(item: Cabang) {
+    try {
+      const uid = auth.currentUser?.uid || null;
+      await updateDoc(doc(db, "branches", item.id), {
+        active: !item.aktif,
+        updatedAt: serverTimestamp(),
+        updatedBy: uid,
+      });
+    } catch (e: any) {
+      console.log("toggle error:", e);
+      Alert.alert("Gagal", e?.message || "Tidak bisa mengubah status cabang.");
+    }
   }
 
   function onEdit(item: Cabang) {
-    Alert.alert(
-      "Edit Cabang (dummy)",
-      `Nanti bisa edit nama/alamat.\n\nCabang: ${item.nama}`
-    );
+    setEditId(item.id);
+    setNama(item.nama);
+    setAlamat(item.alamat && item.alamat !== "-" ? item.alamat : "");
+    setShowForm(true);
+  }
+
+  function onCancelEdit() {
+    resetForm();
+    setShowForm(false);
   }
 
   return (
@@ -127,7 +201,11 @@ export default function CabangPage() {
           <TouchableOpacity
             activeOpacity={0.9}
             style={styles.primaryBtn}
-            onPress={() => setShowForm((v) => !v)}
+            onPress={() => {
+              // kalau lagi edit, tombol ini tetap bisa menutup
+              if (!showForm) openAddForm();
+              else setShowForm((v) => !v);
+            }}
           >
             <Ionicons
               name={showForm ? "close-outline" : "add-outline"}
@@ -141,7 +219,11 @@ export default function CabangPage() {
 
           {showForm && (
             <View style={styles.formBox}>
-              <Text style={styles.label}>Nama Cabang</Text>
+              <Text style={styles.label}>
+                {editId ? "Edit Cabang" : "Tambah Cabang"}
+              </Text>
+
+              <Text style={[styles.label, { marginTop: 12 }]}>Nama Cabang</Text>
               <View style={styles.inputWrap2}>
                 <TextInput
                   value={nama}
@@ -168,15 +250,32 @@ export default function CabangPage() {
               <TouchableOpacity
                 activeOpacity={0.9}
                 style={styles.saveBtn}
-                onPress={onAdd}
+                onPress={onSave}
               >
                 <Ionicons
                   name="checkmark-circle-outline"
                   size={18}
                   color="#fff"
                 />
-                <Text style={styles.saveText}>Simpan Cabang</Text>
+                <Text style={styles.saveText}>
+                  {editId ? "Update Cabang" : "Simpan Cabang"}
+                </Text>
               </TouchableOpacity>
+
+              {editId && (
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  style={[styles.saveBtn, { backgroundColor: "#64748B" }]}
+                  onPress={onCancelEdit}
+                >
+                  <Ionicons
+                    name="close-circle-outline"
+                    size={18}
+                    color="#fff"
+                  />
+                  <Text style={styles.saveText}>Batal Edit</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
@@ -186,12 +285,16 @@ export default function CabangPage() {
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>Daftar Cabang</Text>
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{filtered.length} Cabang</Text>
+              <Text style={styles.badgeText}>
+                {loading ? "..." : `${filtered.length} Cabang`}
+              </Text>
             </View>
           </View>
 
           <View style={{ marginTop: 12, gap: 10 }}>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <Text style={styles.empty}>Memuat data...</Text>
+            ) : filtered.length === 0 ? (
               <Text style={styles.empty}>Belum ada cabang.</Text>
             ) : (
               filtered.map((c) => (
@@ -235,7 +338,7 @@ export default function CabangPage() {
                         styles.smallBtn,
                         c.aktif ? styles.smallWarn : styles.smallOk,
                       ]}
-                      onPress={() => onToggleAktif(c.id)}
+                      onPress={() => onToggleAktif(c)}
                     >
                       <Ionicons
                         name={c.aktif ? "pause-outline" : "play-outline"}
@@ -250,7 +353,7 @@ export default function CabangPage() {
           </View>
 
           <Text style={styles.note}>
-            * Ini masih dummy. Nanti disimpan ke Firebase.
+            * Data cabang tersimpan ke Firebase (Firestore) & realtime.
           </Text>
         </View>
 
