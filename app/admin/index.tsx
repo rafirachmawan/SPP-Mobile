@@ -1,71 +1,61 @@
-import React, { useMemo, useState } from "react";
+import React from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
-  Alert,
-  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
-type Student = {
-  id: string;
-  name: string;
-  tipe: "Normal" | "Beasiswa 0" | "Beasiswa 100" | "Pertemuan (8x)";
-  nominal: number;
+const THEME = {
+  bg1: "#BFE9FF",
+  bg2: "#EAF6FF",
+  bg3: "#F7FBFF",
+  text: "#0F172A",
+  sub: "#64748B",
+  border: "#E2E8F0",
+  card: "rgba(255,255,255,0.92)",
+  primary: "#0EA5E9",
 };
 
-export default function TabBayarSPP() {
-  const today = new Date();
-  const canSpin = today.getDate() < 11;
+export default function AdminDashboard() {
+  const router = useRouter();
 
-  // ✅ nanti ini dari Firebase sesuai cabang admin
-  const students = useMemo<Student[]>(
-    () => [
-      { id: "S1", name: "ANAK A", tipe: "Normal", nominal: 200000 },
-      { id: "S2", name: "ANAK B", tipe: "Beasiswa 0", nominal: 0 },
-      { id: "S3", name: "ANAK C", tipe: "Pertemuan (8x)", nominal: 150000 },
-      { id: "S4", name: "ANAK D", tipe: "Beasiswa 100", nominal: 100000 },
-      { id: "S5", name: "ANAK E", tipe: "Normal", nominal: 200000 },
-    ],
-    []
-  );
+  const stats = [
+    { label: "Total Siswa", value: "120", icon: "school-outline" },
+    { label: "Bayar Bulan Ini", value: "45", icon: "cash-outline" },
+    { label: "Spin Dipakai", value: "12", icon: "gift-outline" },
+    { label: "Info", value: "UI dulu", icon: "information-circle-outline" },
+  ];
 
-  const [q, setQ] = useState("");
-  const [selected, setSelected] = useState<Student | null>(null);
-
-  const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    if (!qq) return students;
-    return students.filter((x) => x.name.toLowerCase().includes(qq));
-  }, [q, students]);
-
-  function onPay() {
-    if (!selected) return;
-    Alert.alert(
-      "Berhasil (dummy)",
-      `Pembayaran SPP untuk ${selected.name} tersimpan.`
-    );
-  }
-
-  function onSpin() {
-    if (!selected) return;
-    if (!canSpin)
-      return Alert.alert("Tidak bisa spin", "Spin hanya sebelum tanggal 11.");
-    Alert.alert(
-      "Hasil Spin (dummy)",
-      `🎉 ${selected.name} dapat potongan Rp 10.000 untuk bulan depan.`
-    );
-  }
+  const actions = [
+    {
+      title: "Bayar SPP",
+      desc: "Cari siswa → pilih → Bayar atau Spin.",
+      icon: "receipt-outline",
+      to: "/admin/bayar",
+    },
+    {
+      title: "Siswa",
+      desc: "Daftar siswa cabang ini + mutasi pembayaran.",
+      icon: "people-outline",
+      to: "/admin/siswa",
+    },
+    {
+      title: "Riwayat",
+      desc: "Riwayat pembayaran yang sudah tercatat.",
+      icon: "time-outline",
+      to: "/admin/riwayat",
+    },
+  ];
 
   return (
     <View style={{ flex: 1 }}>
       <LinearGradient
-        colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
+        colors={[THEME.bg1, THEME.bg2, THEME.bg3]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -73,305 +63,193 @@ export default function TabBayarSPP() {
 
       <ScrollView
         contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.brand}>Shining Sun 🎈</Text>
-          <View style={styles.chip}>
-            <Text style={styles.chipText}>
-              {canSpin ? "Spin ON" : "Spin OFF"}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.brand}>Shining Sun 🎈</Text>
+            <Text style={styles.title}>Dashboard Admin</Text>
+            <Text style={styles.subtitle}>
+              Kelola pembayaran SPP cabang ini. Mulai dari Bayar SPP atau cek
+              siswa.
             </Text>
           </View>
-        </View>
 
-        <Text style={styles.title}>Bayar SPP</Text>
-        <Text style={styles.subtitle}>
-          Cari nama siswa → klik siswa → muncul tombol{" "}
-          <Text style={styles.bold}>Bayar</Text> &{" "}
-          <Text style={styles.bold}>Spin</Text>.
-        </Text>
-
-        {/* Card: Cari + List */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Cari Siswa 🧸</Text>
-
-          <View style={styles.inputWrap}>
-            <TextInput
-              value={q}
-              onChangeText={(t) => {
-                setQ(t);
-                if (!t.trim()) setSelected(null);
-              }}
-              placeholder="Ketik nama siswa..."
-              placeholderTextColor="#94A3B8"
-              style={styles.input}
-            />
-            <View style={styles.rightIcon}>
-              <Ionicons name="search-outline" size={18} color="#64748B" />
-            </View>
-          </View>
-
-          <View style={{ marginTop: 12, gap: 10 }}>
-            {filtered.length === 0 ? (
-              <Text style={styles.empty}>Tidak ada siswa.</Text>
-            ) : (
-              filtered.slice(0, 10).map((s) => {
-                const active = selected?.id === s.id;
-                return (
-                  <TouchableOpacity
-                    key={s.id}
-                    activeOpacity={0.9}
-                    onPress={() => setSelected(s)}
-                    style={[
-                      styles.studentItem,
-                      active && styles.studentItemActive,
-                    ]}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.studentName}>{s.name}</Text>
-                      <Text style={styles.studentSub}>
-                        {s.tipe} • Rp {s.nominal.toLocaleString("id-ID")}
-                      </Text>
-                    </View>
-
-                    <Ionicons
-                      name={active ? "checkmark-circle" : "chevron-forward"}
-                      size={22}
-                      color={active ? "#16A34A" : "#94A3B8"}
-                    />
-                  </TouchableOpacity>
-                );
-              })
-            )}
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>Cabang</Text>
           </View>
         </View>
 
-        {/* Card: Aksi Bayar + Spin */}
-        {selected ? (
-          <View style={styles.card}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.cardTitle}>Aksi Pembayaran</Text>
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{selected.tipe}</Text>
+        {/* Stats */}
+        <View style={styles.statsGrid}>
+          {stats.map((s) => (
+            <View key={s.label} style={styles.statCard}>
+              <View style={styles.statIcon}>
+                <Ionicons name={s.icon as any} size={18} color="#1D4ED8" />
               </View>
+              <Text style={styles.statLabel}>{s.label}</Text>
+              <Text style={styles.statValue}>{s.value}</Text>
             </View>
+          ))}
+        </View>
 
-            <Text style={styles.bigName}>{selected.name}</Text>
-            <Text style={styles.meta}>
-              Nominal:{" "}
-              <Text style={styles.meta2}>
-                Rp {selected.nominal.toLocaleString("id-ID")}
-              </Text>
-            </Text>
+        {/* Quick actions */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Menu Utama</Text>
+          <Text style={styles.cardSub}>Pilih fitur untuk membuka konten.</Text>
 
-            <View style={styles.actions}>
-              <TouchableOpacity
-                activeOpacity={0.9}
-                style={styles.primaryBtn}
-                onPress={onPay}
-              >
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={18}
-                  color="#fff"
-                />
-                <Text style={styles.primaryText}>Bayar SPP</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.9}
-                style={[styles.spinBtn, !canSpin && { opacity: 0.55 }]}
-                onPress={onSpin}
-                disabled={!canSpin}
-              >
-                <Ionicons name="gift-outline" size={18} color="#fff" />
-                <Text style={styles.spinText}>Spin</Text>
-              </TouchableOpacity>
-            </View>
-
+          {actions.map((a) => (
             <TouchableOpacity
+              key={a.title}
               activeOpacity={0.9}
-              style={styles.secondaryBtn}
-              onPress={() => setSelected(null)}
+              onPress={() => router.push(a.to as any)}
+              style={styles.rowBtn}
             >
-              <Ionicons name="close-circle-outline" size={18} color="#0F172A" />
-              <Text style={styles.secondaryText}>Batal pilih siswa</Text>
+              <View style={styles.rowIcon}>
+                <Ionicons name={a.icon as any} size={18} color="#1D4ED8" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{a.title}</Text>
+                <Text style={styles.rowDesc}>{a.desc}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>
+          ))}
+        </View>
 
-            <Text style={styles.note}>
-              * Spin hanya sebelum tanggal 11. Hasil spin dipakai untuk potongan
-              bulan depan.
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.helperCard}>
-            <Text style={styles.helperText}>
-              Pilih siswa dulu agar tombol Bayar & Spin muncul 😊
-            </Text>
-          </View>
-        )}
+        {/* Note */}
+        <View style={styles.noteCard}>
+          <Ionicons
+            name="information-circle-outline"
+            size={18}
+            color="#0F172A"
+          />
+          <Text style={styles.noteText}>
+            Ini masih UI dummy. Nanti data cabang, siswa, dan pembayaran
+            disambungkan ke Firebase.
+          </Text>
+        </View>
 
-        <View style={{ height: Platform.OS === "ios" ? 8 : 16 }} />
+        <View style={{ height: 16 }} />
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
+  scroll: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 26 },
 
-  header: {
-    paddingHorizontal: 4,
+  headerRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
+    alignItems: "flex-start",
   },
-  brand: { fontWeight: "900", color: "#1D4ED8", letterSpacing: 0.3 },
-  chip: {
+  brand: { color: "#2563EB", fontWeight: "900" },
+  title: { marginTop: 6, fontSize: 26, fontWeight: "900", color: THEME.text },
+  subtitle: {
+    marginTop: 8,
+    color: THEME.sub,
+    fontWeight: "700",
+    lineHeight: 20,
+    maxWidth: 280,
+  },
+  pill: {
     backgroundColor: "rgba(219,234,254,0.95)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
-  },
-  chipText: { color: "#1E40AF", fontWeight: "900", fontSize: 12 },
-
-  title: { fontSize: 26, fontWeight: "900", color: "#0F172A", marginTop: 2 },
-  subtitle: {
-    color: "#64748B",
-    lineHeight: 20,
-    fontWeight: "700",
-    marginTop: 2,
-  },
-  bold: { fontWeight: "900", color: "#0F172A" },
-
-  card: {
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 22,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.95)",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2,
-  },
-  cardTitle: { fontSize: 16, fontWeight: "900", color: "#0F172A" },
-
-  inputWrap: {
-    marginTop: 12,
-    position: "relative",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    paddingLeft: 12,
-    paddingRight: 42,
-    height: 48,
-    justifyContent: "center",
-  },
-  input: { fontSize: 14, color: "#0F172A", fontWeight: "700" },
-  rightIcon: {
-    position: "absolute",
-    right: 12,
-    height: 48,
-    width: 30,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  studentItem: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 16,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  studentItemActive: { borderColor: "#86EFAC", backgroundColor: "#F0FDF4" },
-  studentName: { fontWeight: "900", color: "#0F172A", fontSize: 15 },
-  studentSub: { marginTop: 4, color: "#64748B", fontWeight: "700" },
-
-  rowBetween: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
-  },
-  badge: {
-    backgroundColor: "#DBEAFE",
-    borderColor: "#BFDBFE",
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 999,
   },
-  badgeText: { fontWeight: "900", fontSize: 12, color: "#0F172A" },
+  pillText: { color: "#1E40AF", fontWeight: "900", fontSize: 12 },
 
-  bigName: { marginTop: 10, fontWeight: "900", color: "#0F172A", fontSize: 18 },
-  meta: { marginTop: 8, color: "#64748B", fontWeight: "800" },
-  meta2: { color: "#0F172A", fontWeight: "900" },
-
-  actions: { marginTop: 14, flexDirection: "row", gap: 10 },
-  primaryBtn: {
-    flex: 1,
-    backgroundColor: "#0EA5E9",
-    paddingVertical: 14,
+  statsGrid: {
+    marginTop: 14,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  statCard: {
+    width: "48%",
+    backgroundColor: THEME.card,
     borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    padding: 12,
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 16,
+    backgroundColor: "rgba(219,234,254,0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(191,219,254,1)",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
+    marginBottom: 8,
   },
-  primaryText: { color: "white", fontWeight: "900", fontSize: 15 },
-
-  spinBtn: {
-    width: 110,
-    backgroundColor: "#7C3AED",
-    paddingVertical: 14,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
+  statLabel: { color: THEME.sub, fontWeight: "800", fontSize: 12 },
+  statValue: {
+    marginTop: 4,
+    color: THEME.text,
+    fontWeight: "900",
+    fontSize: 20,
   },
-  spinText: { color: "white", fontWeight: "900", fontSize: 14 },
 
-  secondaryBtn: {
+  card: {
+    marginTop: 14,
+    backgroundColor: THEME.card,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    padding: 12,
+  },
+  cardTitle: { fontSize: 16, fontWeight: "900", color: THEME.text },
+  cardSub: { marginTop: 6, color: THEME.sub, fontWeight: "700", fontSize: 12 },
+
+  rowBtn: {
     marginTop: 10,
-    backgroundColor: "rgba(255,255,255,0.95)",
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.9)",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingVertical: 12,
+    borderColor: "rgba(226,232,240,0.95)",
     borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  rowIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 16,
+    backgroundColor: "rgba(219,234,254,0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(191,219,254,1)",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
   },
-  secondaryText: { color: "#0F172A", fontWeight: "900" },
+  rowTitle: { fontWeight: "900", color: THEME.text },
+  rowDesc: { marginTop: 2, color: THEME.sub, fontWeight: "700", fontSize: 12 },
 
-  note: {
+  noteCard: {
     marginTop: 12,
-    textAlign: "center",
-    color: "#94A3B8",
-    fontWeight: "700",
-    fontSize: 12,
-  },
-
-  helperCard: {
-    borderRadius: 18,
-    padding: 14,
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.85)",
     borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.9)",
-    backgroundColor: "rgba(255,255,255,0.75)",
+    borderColor: "rgba(226,232,240,0.95)",
+    borderRadius: 16,
+    padding: 12,
   },
-  helperText: { textAlign: "center", color: "#64748B", fontWeight: "800" },
-
-  empty: { color: "#64748B", fontWeight: "700" },
+  noteText: {
+    flex: 1,
+    color: "#475569",
+    fontWeight: "800",
+    fontSize: 12,
+    lineHeight: 16,
+  },
 });

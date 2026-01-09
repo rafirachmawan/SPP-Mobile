@@ -2,54 +2,83 @@ import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
-export default function AdminTabsLayout() {
+const THEME = {
+  primary: "#0EA5E9",
+  muted: "#94A3B8",
+  border: "#E2E8F0",
+};
+
+export default function AdminLayout() {
   return (
     <Tabs
+      initialRouteName="index"
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#0EA5E9",
-        tabBarInactiveTintColor: "#64748B",
-        tabBarLabelStyle: { fontWeight: "900", fontSize: 12 },
+        tabBarActiveTintColor: THEME.primary,
+        tabBarInactiveTintColor: THEME.muted,
         tabBarStyle: {
-          height: 66,
+          height: 62,
           paddingTop: 8,
           paddingBottom: 10,
-          borderTopWidth: 1,
-          borderTopColor: "rgba(226,232,240,0.95)",
-          backgroundColor: "rgba(255,255,255,0.96)",
+          borderTopColor: THEME.border,
+        },
+        tabBarLabelStyle: {
+          fontWeight: "800",
+          fontSize: 11,
         },
       }}
     >
+      {/* 1) Dashboard */}
       <Tabs.Screen
         name="index"
         options={{
-          title: "Bayar SPP",
+          title: "Dashboard",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cash-outline" size={size ?? 22} color={color} />
+            <Ionicons name="grid-outline" size={size} color={color} />
           ),
         }}
       />
 
+      {/* 2) Bayar SPP (✅ baru di footbar) */}
+      <Tabs.Screen
+        name="bayar"
+        options={{
+          title: "Bayar SPP",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="cash-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* 3) Siswa */}
       <Tabs.Screen
         name="siswa"
         options={{
           title: "Siswa",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size ?? 22} color={color} />
+            <Ionicons name="people-outline" size={size} color={color} />
           ),
         }}
       />
 
+      {/* 4) Riwayat */}
+      <Tabs.Screen
+        name="riwayat"
+        options={{
+          title: "Riwayat",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="time-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* 5) Akun (✅ paling kanan) */}
       <Tabs.Screen
         name="akun"
         options={{
           title: "Akun",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons
-              name="person-circle-outline"
-              size={size ?? 24}
-              color={color}
-            />
+            <Ionicons name="person-circle-outline" size={size} color={color} />
           ),
         }}
       />
