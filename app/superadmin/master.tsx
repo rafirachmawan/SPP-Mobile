@@ -23,6 +23,7 @@ const THEME = {
 export default function MasterMenu() {
   const router = useRouter();
 
+  // ✅ Setting SPP dihapus dari Master (karena sudah disetting saat bikin siswa)
   const items = [
     {
       title: "Tambah / Kelola Cabang",
@@ -41,12 +42,6 @@ export default function MasterMenu() {
       desc: "Atur daftar hadiah & peluang spin.",
       icon: "gift-outline",
       href: "/superadmin/spin",
-    },
-    {
-      title: "Setting SPP (Global & Per Siswa)",
-      desc: "Nominal SPP default & override siswa tertentu.",
-      icon: "cash-outline",
-      href: "/superadmin/setting-spp",
     },
 
     // ✅ BARU: TAMBAH / KELOLA SISWA (INPUT SISWA PER CABANG)

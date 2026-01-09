@@ -1,6 +1,7 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const THEME = {
   primary: "#0EA5E9",
@@ -9,6 +10,8 @@ const THEME = {
 };
 
 export default function AdminLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       initialRouteName="index"
@@ -16,12 +19,15 @@ export default function AdminLayout() {
         headerShown: false,
         tabBarActiveTintColor: THEME.primary,
         tabBarInactiveTintColor: THEME.muted,
+
+        // ✅ aman di Android gesture/home bar + iOS
         tabBarStyle: {
-          height: 62,
-          paddingTop: 8,
-          paddingBottom: 10,
           borderTopColor: THEME.border,
+          height: 62 + insets.bottom,
+          paddingTop: 8,
+          paddingBottom: 10 + insets.bottom,
         },
+
         tabBarLabelStyle: {
           fontWeight: "800",
           fontSize: 11,
@@ -39,7 +45,7 @@ export default function AdminLayout() {
         }}
       />
 
-      {/* 2) Bayar SPP (✅ baru di footbar) */}
+      {/* 2) Bayar SPP */}
       <Tabs.Screen
         name="bayar"
         options={{
@@ -72,7 +78,7 @@ export default function AdminLayout() {
         }}
       />
 
-      {/* 5) Akun (✅ paling kanan) */}
+      {/* 5) Akun (paling kanan) */}
       <Tabs.Screen
         name="akun"
         options={{

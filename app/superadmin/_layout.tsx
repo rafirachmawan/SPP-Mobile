@@ -1,6 +1,7 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const THEME = {
   primary: "#0EA5E9",
@@ -9,25 +10,29 @@ const THEME = {
 };
 
 export default function SuperadminTabsLayout() {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: THEME.primary,
         tabBarInactiveTintColor: THEME.muted,
+
+        // ✅ bikin tabbar aman untuk gesture/home bar Android
         tabBarStyle: {
           borderTopColor: THEME.border,
-          height: 62,
+          height: 62 + insets.bottom, // ✅ tambah inset bawah
           paddingTop: 8,
-          paddingBottom: 10,
+          paddingBottom: 10 + insets.bottom, // ✅ tambah inset bawah
         },
+
         tabBarLabelStyle: {
           fontWeight: "800",
           fontSize: 11,
         },
       }}
     >
-      {/* DASHBOARD */}
       <Tabs.Screen
         name="index"
         options={{
@@ -38,7 +43,6 @@ export default function SuperadminTabsLayout() {
         }}
       />
 
-      {/* MASTER */}
       <Tabs.Screen
         name="master"
         options={{
@@ -49,7 +53,6 @@ export default function SuperadminTabsLayout() {
         }}
       />
 
-      {/* AKUN */}
       <Tabs.Screen
         name="akun"
         options={{
@@ -60,14 +63,12 @@ export default function SuperadminTabsLayout() {
         }}
       />
 
-      {/* HIDE: semua halaman fitur (dibuka dari Master) */}
+      {/* HIDE: semua halaman fitur */}
       <Tabs.Screen name="cabang" options={{ href: null }} />
       <Tabs.Screen name="admin-cabang" options={{ href: null }} />
       <Tabs.Screen name="spin" options={{ href: null }} />
       <Tabs.Screen name="setting-spp" options={{ href: null }} />
       <Tabs.Screen name="siswa" options={{ href: null }} />
-
-      {/* ✅ INI YANG KURANG: hide tambah-siswa biar gak muncul di footbar */}
       <Tabs.Screen name="tambah-siswa" options={{ href: null }} />
     </Tabs>
   );

@@ -1,18 +1,26 @@
 import React, { useMemo } from "react";
 import {
-  View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
   Alert,
+  View,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 export default function SuperadminDashboard() {
   const router = useRouter();
+
+  const tabH = useBottomTabBarHeight(); // ✅ tinggi footbar dinamis
+  const insets = useSafeAreaInsets(); // ✅ aman untuk gesture/home bar Android
 
   // ✅ dummy ringkasan (nanti dari database)
   const summary = useMemo(
@@ -27,7 +35,7 @@ export default function SuperadminDashboard() {
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
         start={{ x: 0, y: 0 }}
@@ -35,7 +43,17 @@ export default function SuperadminDashboard() {
         style={StyleSheet.absoluteFill}
       />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            // ✅ ini kunci: footbar + safe area bottom (gesture/nav bar) + extra ruang
+            paddingBottom: tabH + insets.bottom + 18,
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <Text style={styles.brand}>SPP Mobile</Text>
           <View style={styles.chip}>
@@ -148,7 +166,7 @@ export default function SuperadminDashboard() {
 
         <View style={{ height: 10 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -181,6 +199,7 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 4,
+    paddingTop: 4, // ✅ biar header gak mepet status bar
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

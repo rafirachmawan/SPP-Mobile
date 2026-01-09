@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,7 +15,14 @@ import { Ionicons } from "@expo/vector-icons";
 import { auth, db } from "../../firebase"; // sesuaikan path
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
-type Hadiah = { id: string; label: string; nominal: number; peluang: number };
+// ✅ tambah field kuota
+type Hadiah = {
+  id: string;
+  label: string;
+  nominal: number;
+  peluang: number;
+  kuota: number; // 0 = unlimited (bebas)
+};
 
 const DOC_PATH = { col: "spin_settings", id: "global" };
 
@@ -29,10 +35,28 @@ export default function SpinSettingPage() {
   // ===== default dummy kalau belum ada data di Firestore =====
   const dummyHadiah = useMemo<Hadiah[]>(
     () => [
-      { id: "H1", label: "Potongan 10.000", nominal: 10000, peluang: 35 },
-      { id: "H2", label: "Potongan 20.000", nominal: 20000, peluang: 25 },
-      { id: "H3", label: "Potongan 50.000", nominal: 50000, peluang: 10 },
-      { id: "H4", label: "Zonk", nominal: 0, peluang: 30 },
+      {
+        id: "H1",
+        label: "Potongan 10.000",
+        nominal: 10000,
+        peluang: 35,
+        kuota: 0,
+      },
+      {
+        id: "H2",
+        label: "Potongan 20.000",
+        nominal: 20000,
+        peluang: 25,
+        kuota: 0,
+      },
+      {
+        id: "H3",
+        label: "Potongan 50.000",
+        nominal: 50000,
+        peluang: 10,
+        kuota: 0,
+      },
+      { id: "H4", label: "Zonk", nominal: 0, peluang: 30, kuota: 0 },
     ],
     []
   );
@@ -43,6 +67,7 @@ export default function SpinSettingPage() {
   const [label, setLabel] = useState("");
   const [nominal, setNominal] = useState("");
   const [peluang, setPeluang] = useState("");
+  const [kuota, setKuota] = useState(""); // ✅ input kuota di form tambah hadiah
 
   const [sebelumTanggal, setSebelumTanggal] = useState("11");
   const [dipakaiBulanDepan, setDipakaiBulanDepan] = useState(true);
@@ -76,6 +101,8 @@ export default function SpinSettingPage() {
                   label: String(h.label || ""),
                   nominal: Number(h.nominal || 0),
                   peluang: Number(h.peluang || 0),
+                  // ✅ backward compatible: kalau dokumen lama belum ada "kuota"
+                  kuota: Number.isFinite(Number(h.kuota)) ? Number(h.kuota) : 0,
                 }))
               : dummyHadiah;
 
@@ -97,26 +124,36 @@ export default function SpinSettingPage() {
     const l = label.trim();
     const n = toInt(nominal, 0);
     const p = toInt(peluang, 0);
+    const q = toInt(kuota, 0); // ✅ 0 = unlimited
 
     if (!l) return Alert.alert("Gagal", "Nama hadiah wajib diisi.");
     if (!Number.isFinite(n) || n < 0)
       return Alert.alert("Gagal", "Nominal tidak valid.");
     if (!Number.isFinite(p) || p <= 0)
       return Alert.alert("Gagal", "Peluang harus > 0.");
+    if (!Number.isFinite(q) || q < 0)
+      return Alert.alert("Gagal", "Kuota tidak valid (minimal 0).");
 
     setItems((prev) => [
-      { id: `H${Date.now()}`, label: l, nominal: n, peluang: p },
+      { id: `H${Date.now()}`, label: l, nominal: n, peluang: p, kuota: q },
       ...prev,
     ]);
 
     setLabel("");
     setNominal("");
     setPeluang("");
+    setKuota("");
     setShowForm(false);
   }
 
   function remove(id: string) {
     setItems((prev) => prev.filter((x) => x.id !== id));
+  }
+
+  // ✅ edit kuota inline (tanpa ubah logika lain)
+  function updateKuota(id: string, v: string) {
+    const q = toInt(v, 0);
+    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, kuota: q } : x)));
   }
 
   async function saveAll() {
@@ -162,6 +199,7 @@ export default function SpinSettingPage() {
             label: h.label,
             nominal: Number(h.nominal || 0),
             peluang: Number(h.peluang || 0),
+            kuota: Number(h.kuota || 0), // ✅ simpan kuota
           })),
           updatedAt: serverTimestamp(),
           updatedBy: auth.currentUser?.uid || null,
@@ -310,6 +348,21 @@ export default function SpinSettingPage() {
                     />
                   </View>
 
+                  {/* ✅ tambah input kuota */}
+                  <Text style={[styles.label, { marginTop: 12 }]}>
+                    Kuota (0 = unlimited)
+                  </Text>
+                  <View style={styles.inputWrap2}>
+                    <TextInput
+                      value={kuota}
+                      onChangeText={setKuota}
+                      placeholder="0"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      style={styles.input2}
+                    />
+                  </View>
+
                   <TouchableOpacity
                     activeOpacity={0.9}
                     style={styles.saveBtn}
@@ -332,8 +385,25 @@ export default function SpinSettingPage() {
                       <Text style={styles.itemTitle}>{h.label}</Text>
                       <Text style={styles.itemSub}>
                         Nominal: Rp {h.nominal.toLocaleString("id-ID")} •
-                        Peluang: {h.peluang}%
+                        Peluang: {h.peluang}% • Kuota:{" "}
+                        {h.kuota === 0 ? "∞" : h.kuota}
                       </Text>
+
+                      {/* ✅ editor kuota per hadiah (ringan, tanpa ubah flow lain) */}
+                      <View style={styles.inlineRow}>
+                        <Text style={styles.inlineLabel}>Ubah kuota</Text>
+                        <View style={styles.inlineInputWrap}>
+                          <TextInput
+                            value={String(h.kuota ?? 0)}
+                            onChangeText={(v) => updateKuota(h.id, v)}
+                            placeholder="0"
+                            placeholderTextColor="#94A3B8"
+                            keyboardType="number-pad"
+                            style={styles.inlineInput}
+                          />
+                        </View>
+                        <Text style={styles.inlineHint}>(0=∞)</Text>
+                      </View>
                     </View>
 
                     <TouchableOpacity
@@ -523,6 +593,27 @@ const styles = StyleSheet.create({
   },
   itemTitle: { fontWeight: "900", color: "#0F172A", fontSize: 15 },
   itemSub: { marginTop: 4, color: "#64748B", fontWeight: "700" },
+
+  inlineRow: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  inlineLabel: { fontWeight: "900", color: "#0F172A" },
+  inlineInputWrap: {
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    height: 40,
+    justifyContent: "center",
+    minWidth: 90,
+  },
+  inlineInput: { fontSize: 14, color: "#0F172A", fontWeight: "800" },
+  inlineHint: { color: "#64748B", fontWeight: "800" },
 
   trashBtn: {
     width: 40,
