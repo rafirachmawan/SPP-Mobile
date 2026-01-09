@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,14 +7,27 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
+// ✅ Firebase
+import { auth, db } from "../../firebase"; // sesuaikan path
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+
 type Hadiah = { id: string; label: string; nominal: number; peluang: number };
 
+const DOC_PATH = { col: "spin_settings", id: "global" };
+
+function toInt(v: string, fallback = 0) {
+  const n = Number(String(v || "").replace(/[^\d]/g, ""));
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export default function SpinSettingPage() {
-  const initial = useMemo<Hadiah[]>(
+  // ===== default dummy kalau belum ada data di Firestore =====
+  const dummyHadiah = useMemo<Hadiah[]>(
     () => [
       { id: "H1", label: "Potongan 10.000", nominal: 10000, peluang: 35 },
       { id: "H2", label: "Potongan 20.000", nominal: 20000, peluang: 25 },
@@ -24,7 +37,7 @@ export default function SpinSettingPage() {
     []
   );
 
-  const [items, setItems] = useState<Hadiah[]>(initial);
+  const [items, setItems] = useState<Hadiah[]>(dummyHadiah);
   const [showForm, setShowForm] = useState(false);
 
   const [label, setLabel] = useState("");
@@ -34,15 +47,56 @@ export default function SpinSettingPage() {
   const [sebelumTanggal, setSebelumTanggal] = useState("11");
   const [dipakaiBulanDepan, setDipakaiBulanDepan] = useState(true);
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const total = useMemo(
     () => items.reduce((a, b) => a + (b.peluang || 0), 0),
     [items]
   );
 
+  // ===================== LOAD dari Firestore =====================
+  useEffect(() => {
+    (async () => {
+      try {
+        const ref = doc(db, DOC_PATH.col, DOC_PATH.id);
+        const snap = await getDoc(ref);
+
+        if (snap.exists()) {
+          const data = snap.data() as any;
+
+          const st = String(data.sebelumTanggal ?? "11");
+          const dipakai = data.dipakaiBulanDepan !== false;
+
+          const hadiahRaw = Array.isArray(data.hadiah) ? data.hadiah : [];
+          const hadiah: Hadiah[] =
+            hadiahRaw.length > 0
+              ? hadiahRaw.map((h: any, idx: number) => ({
+                  id: String(h.id || `H${idx + 1}`),
+                  label: String(h.label || ""),
+                  nominal: Number(h.nominal || 0),
+                  peluang: Number(h.peluang || 0),
+                }))
+              : dummyHadiah;
+
+          setSebelumTanggal(st);
+          setDipakaiBulanDepan(dipakai);
+          setItems(hadiah);
+        }
+      } catch (e: any) {
+        console.log(e);
+        Alert.alert("Gagal", "Tidak bisa memuat setting spin.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function addHadiah() {
     const l = label.trim();
-    const n = Number(nominal || 0);
-    const p = Number(peluang || 0);
+    const n = toInt(nominal, 0);
+    const p = toInt(peluang, 0);
 
     if (!l) return Alert.alert("Gagal", "Nama hadiah wajib diisi.");
     if (!Number.isFinite(n) || n < 0)
@@ -65,13 +119,63 @@ export default function SpinSettingPage() {
     setItems((prev) => prev.filter((x) => x.id !== id));
   }
 
-  function saveAll() {
-    Alert.alert(
-      "Tersimpan (dummy)",
-      `Aturan spin disimpan.\nTotal peluang: ${total}%\nSpin sebelum tanggal: ${sebelumTanggal}\nDipakai bulan depan: ${
-        dipakaiBulanDepan ? "Ya" : "Tidak"
-      }`
-    );
+  async function saveAll() {
+    const tgl = toInt(sebelumTanggal, 11);
+
+    if (tgl < 1 || tgl > 31)
+      return Alert.alert("Gagal", "Tanggal harus 1 - 31.");
+
+    if (items.length === 0)
+      return Alert.alert("Gagal", "Minimal harus ada 1 hadiah.");
+
+    // ✅ aturan peluang: kamu bisa pilih mau wajib 100 atau warning
+    if (total !== 100) {
+      return Alert.alert(
+        "Total peluang belum 100%",
+        `Sekarang total: ${total}%.\n\nBiar adil, idealnya 100%.`,
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Tetap Simpan",
+            onPress: () => doSave(tgl),
+          },
+        ]
+      );
+    }
+
+    return doSave(tgl);
+  }
+
+  async function doSave(tgl: number) {
+    try {
+      setSaving(true);
+
+      const ref = doc(db, DOC_PATH.col, DOC_PATH.id);
+
+      await setDoc(
+        ref,
+        {
+          sebelumTanggal: tgl,
+          dipakaiBulanDepan,
+          hadiah: items.map((h) => ({
+            id: h.id,
+            label: h.label,
+            nominal: Number(h.nominal || 0),
+            peluang: Number(h.peluang || 0),
+          })),
+          updatedAt: serverTimestamp(),
+          updatedBy: auth.currentUser?.uid || null,
+        },
+        { merge: true }
+      );
+
+      Alert.alert("Berhasil", "Setting spin tersimpan.");
+    } catch (e: any) {
+      console.log(e);
+      Alert.alert("Gagal", e?.message || "Tidak bisa menyimpan setting.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -93,100 +197,18 @@ export default function SpinSettingPage() {
         />
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Aturan Spin</Text>
+          {loading ? (
+            <Text style={styles.note}>Memuat setting...</Text>
+          ) : (
+            <>
+              <Text style={styles.cardTitle}>Aturan Spin</Text>
 
-          <Text style={styles.label}>Spin hanya sebelum tanggal</Text>
-          <View style={styles.inputWrap2}>
-            <TextInput
-              value={sebelumTanggal}
-              onChangeText={setSebelumTanggal}
-              placeholder="11"
-              placeholderTextColor="#94A3B8"
-              keyboardType="number-pad"
-              style={styles.input2}
-            />
-          </View>
-
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={[
-              styles.toggleBtn,
-              dipakaiBulanDepan && {
-                backgroundColor: "#DCFCE7",
-                borderColor: "#BBF7D0",
-              },
-            ]}
-            onPress={() => setDipakaiBulanDepan((v) => !v)}
-          >
-            <Ionicons
-              name={
-                dipakaiBulanDepan
-                  ? "checkmark-circle-outline"
-                  : "ellipse-outline"
-              }
-              size={18}
-              color="#0F172A"
-            />
-            <Text style={styles.toggleText}>
-              Hasil spin dipakai bulan depan
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.hr} />
-
-          <View style={styles.rowBetween}>
-            <Text style={styles.cardTitle}>Daftar Hadiah</Text>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>Total: {total}%</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={styles.primaryBtn}
-            onPress={() => setShowForm((v) => !v)}
-          >
-            <Ionicons
-              name={showForm ? "close-outline" : "add-outline"}
-              size={20}
-              color="#fff"
-            />
-            <Text style={styles.primaryText}>
-              {showForm ? "Tutup Form" : "Tambah Hadiah"}
-            </Text>
-          </TouchableOpacity>
-
-          {showForm && (
-            <View style={styles.formBox}>
-              <Text style={styles.label}>Nama Hadiah</Text>
+              <Text style={styles.label}>Spin hanya sebelum tanggal</Text>
               <View style={styles.inputWrap2}>
                 <TextInput
-                  value={label}
-                  onChangeText={setLabel}
-                  placeholder="Potongan 10.000"
-                  placeholderTextColor="#94A3B8"
-                  style={styles.input2}
-                />
-              </View>
-
-              <Text style={[styles.label, { marginTop: 12 }]}>Nominal</Text>
-              <View style={styles.inputWrap2}>
-                <TextInput
-                  value={nominal}
-                  onChangeText={setNominal}
-                  placeholder="10000"
-                  placeholderTextColor="#94A3B8"
-                  keyboardType="number-pad"
-                  style={styles.input2}
-                />
-              </View>
-
-              <Text style={[styles.label, { marginTop: 12 }]}>Peluang (%)</Text>
-              <View style={styles.inputWrap2}>
-                <TextInput
-                  value={peluang}
-                  onChangeText={setPeluang}
-                  placeholder="35"
+                  value={sebelumTanggal}
+                  onChangeText={setSebelumTanggal}
+                  placeholder="11"
                   placeholderTextColor="#94A3B8"
                   keyboardType="number-pad"
                   style={styles.input2}
@@ -195,53 +217,153 @@ export default function SpinSettingPage() {
 
               <TouchableOpacity
                 activeOpacity={0.9}
-                style={styles.saveBtn}
-                onPress={addHadiah}
+                style={[
+                  styles.toggleBtn,
+                  dipakaiBulanDepan && {
+                    backgroundColor: "#DCFCE7",
+                    borderColor: "#BBF7D0",
+                  },
+                ]}
+                onPress={() => setDipakaiBulanDepan((v) => !v)}
               >
                 <Ionicons
-                  name="checkmark-circle-outline"
+                  name={
+                    dipakaiBulanDepan
+                      ? "checkmark-circle-outline"
+                      : "ellipse-outline"
+                  }
                   size={18}
+                  color="#0F172A"
+                />
+                <Text style={styles.toggleText}>
+                  Hasil spin dipakai bulan depan
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.hr} />
+
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardTitle}>Daftar Hadiah</Text>
+                <View
+                  style={[
+                    styles.badge,
+                    total === 100
+                      ? { backgroundColor: "#DCFCE7", borderColor: "#BBF7D0" }
+                      : { backgroundColor: "#FEE2E2", borderColor: "#FECACA" },
+                  ]}
+                >
+                  <Text style={styles.badgeText}>Total: {total}%</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.primaryBtn}
+                onPress={() => setShowForm((v) => !v)}
+              >
+                <Ionicons
+                  name={showForm ? "close-outline" : "add-outline"}
+                  size={20}
                   color="#fff"
                 />
-                <Text style={styles.saveText}>Simpan Hadiah</Text>
+                <Text style={styles.primaryText}>
+                  {showForm ? "Tutup Form" : "Tambah Hadiah"}
+                </Text>
               </TouchableOpacity>
-            </View>
-          )}
 
-          <View style={{ marginTop: 12, gap: 10 }}>
-            {items.map((h) => (
-              <View key={h.id} style={styles.item}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.itemTitle}>{h.label}</Text>
-                  <Text style={styles.itemSub}>
-                    Nominal: Rp {h.nominal.toLocaleString("id-ID")} • Peluang:{" "}
-                    {h.peluang}%
+              {showForm && (
+                <View style={styles.formBox}>
+                  <Text style={styles.label}>Nama Hadiah</Text>
+                  <View style={styles.inputWrap2}>
+                    <TextInput
+                      value={label}
+                      onChangeText={setLabel}
+                      placeholder="Potongan 10.000"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.input2}
+                    />
+                  </View>
+
+                  <Text style={[styles.label, { marginTop: 12 }]}>Nominal</Text>
+                  <View style={styles.inputWrap2}>
+                    <TextInput
+                      value={nominal}
+                      onChangeText={setNominal}
+                      placeholder="10000"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      style={styles.input2}
+                    />
+                  </View>
+
+                  <Text style={[styles.label, { marginTop: 12 }]}>
+                    Peluang (%)
                   </Text>
+                  <View style={styles.inputWrap2}>
+                    <TextInput
+                      value={peluang}
+                      onChangeText={setPeluang}
+                      placeholder="35"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="number-pad"
+                      style={styles.input2}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    style={styles.saveBtn}
+                    onPress={addHadiah}
+                  >
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color="#fff"
+                    />
+                    <Text style={styles.saveText}>Simpan Hadiah</Text>
+                  </TouchableOpacity>
                 </View>
+              )}
 
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  style={styles.trashBtn}
-                  onPress={() => remove(h.id)}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#fff" />
-                </TouchableOpacity>
+              <View style={{ marginTop: 12, gap: 10 }}>
+                {items.map((h) => (
+                  <View key={h.id} style={styles.item}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.itemTitle}>{h.label}</Text>
+                      <Text style={styles.itemSub}>
+                        Nominal: Rp {h.nominal.toLocaleString("id-ID")} •
+                        Peluang: {h.peluang}%
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      style={styles.trashBtn}
+                      onPress={() => remove(h.id)}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
 
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={styles.saveAllBtn}
-            onPress={saveAll}
-          >
-            <Ionicons name="save-outline" size={18} color="#fff" />
-            <Text style={styles.saveAllText}>Simpan Semua Setting</Text>
-          </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={[styles.saveAllBtn, saving && { opacity: 0.6 }]}
+                onPress={saveAll}
+                disabled={saving}
+              >
+                <Ionicons name="save-outline" size={18} color="#fff" />
+                <Text style={styles.saveAllText}>
+                  {saving ? "Menyimpan..." : "Simpan Semua Setting"}
+                </Text>
+              </TouchableOpacity>
 
-          <Text style={styles.note}>
-            * Total peluang idealnya 100%. Ini UI dummy dulu.
-          </Text>
+              <Text style={styles.note}>
+                * Setting ini tersimpan di Firestore: spin_settings/global
+              </Text>
+            </>
+          )}
         </View>
 
         <View style={{ height: 12 }} />

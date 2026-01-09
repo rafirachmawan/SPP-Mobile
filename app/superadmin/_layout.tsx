@@ -4,7 +4,6 @@ import { Ionicons } from "@expo/vector-icons";
 
 const THEME = {
   primary: "#0EA5E9",
-  text: "#0F172A",
   muted: "#94A3B8",
   border: "#E2E8F0",
 };
@@ -39,7 +38,7 @@ export default function SuperadminTabsLayout() {
         }}
       />
 
-      {/* MASTER (Menu fitur) */}
+      {/* MASTER */}
       <Tabs.Screen
         name="master"
         options={{
@@ -61,12 +60,15 @@ export default function SuperadminTabsLayout() {
         }}
       />
 
-      {/* HIDE: halaman fitur (dibuka dari Master) */}
+      {/* HIDE: semua halaman fitur (dibuka dari Master) */}
       <Tabs.Screen name="cabang" options={{ href: null }} />
       <Tabs.Screen name="admin-cabang" options={{ href: null }} />
       <Tabs.Screen name="spin" options={{ href: null }} />
       <Tabs.Screen name="setting-spp" options={{ href: null }} />
       <Tabs.Screen name="siswa" options={{ href: null }} />
+
+      {/* ✅ INI YANG KURANG: hide tambah-siswa biar gak muncul di footbar */}
+      <Tabs.Screen name="tambah-siswa" options={{ href: null }} />
     </Tabs>
   );
 }

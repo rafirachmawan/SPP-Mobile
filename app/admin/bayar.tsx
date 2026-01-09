@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,10 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+
+// ✅ Firebase
+import { db, auth } from "../../firebase"; // ✅ sesuaikan path
+import { doc, getDoc } from "firebase/firestore";
 
 const THEME = {
   bg1: "#BFE9FF",
@@ -31,14 +35,86 @@ type Student = {
   pertemuan?: number;
 };
 
+type Hadiah = { id: string; label: string; nominal: number; peluang: number };
+
 function rupiah(n: number) {
-  return "Rp " + n.toLocaleString("id-ID");
+  return "Rp " + Number(n || 0).toLocaleString("id-ID");
+}
+
+// random sesuai peluang (weight)
+function pickByWeight(items: Hadiah[]) {
+  const clean = items
+    .map((x) => ({
+      ...x,
+      peluang: Number(x.peluang || 0),
+      nominal: Number(x.nominal || 0),
+    }))
+    .filter((x) => x.peluang > 0);
+
+  if (clean.length === 0) return null;
+
+  const total = clean.reduce((a, b) => a + b.peluang, 0);
+  let r = Math.random() * total;
+
+  for (const it of clean) {
+    r -= it.peluang;
+    if (r <= 0) return it;
+  }
+  return clean[clean.length - 1];
 }
 
 export default function BayarSPP() {
   const today = new Date();
   const day = today.getDate();
-  const canSpin = day < 11;
+
+  // ===================== SETTING SPIN (Firestore) =====================
+  const [spinLoading, setSpinLoading] = useState(true);
+  const [sebelumTanggal, setSebelumTanggal] = useState(11);
+  const [dipakaiBulanDepan, setDipakaiBulanDepan] = useState(true);
+  const [hadiah, setHadiah] = useState<Hadiah[]>([]);
+
+  const canSpin = day < sebelumTanggal; // ✅ sesuai permintaanmu "sebelum tanggal 11" (strict)
+  // kalau mau termasuk tanggalnya, ganti jadi: day <= sebelumTanggal
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const ref = doc(db, "spin_settings", "global");
+        const snap = await getDoc(ref);
+
+        if (snap.exists()) {
+          const data = snap.data() as any;
+
+          const st = Number(data.sebelumTanggal ?? 11);
+          setSebelumTanggal(Number.isFinite(st) ? st : 11);
+
+          setDipakaiBulanDepan(data.dipakaiBulanDepan !== false);
+
+          const arr = Array.isArray(data.hadiah) ? data.hadiah : [];
+          const parsed: Hadiah[] = arr.map((h: any, idx: number) => ({
+            id: String(h.id || `H${idx + 1}`),
+            label: String(h.label || ""),
+            nominal: Number(h.nominal || 0),
+            peluang: Number(h.peluang || 0),
+          }));
+          setHadiah(parsed);
+        } else {
+          // kalau belum ada setting, fallback sederhana
+          setSebelumTanggal(11);
+          setDipakaiBulanDepan(true);
+          setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
+        }
+      } catch (e: any) {
+        console.log(e);
+        // fallback kalau gagal load
+        setSebelumTanggal(11);
+        setDipakaiBulanDepan(true);
+        setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
+      } finally {
+        setSpinLoading(false);
+      }
+    })();
+  }, []);
 
   // ===== dummy siswa (nanti dari Firebase) =====
   const [students] = useState<Student[]>([
@@ -74,22 +150,37 @@ export default function BayarSPP() {
     setModalOpen(false);
   }
 
-  function spinHadiah() {
+  async function spinHadiah() {
+    if (spinLoading) {
+      Alert.alert("Tunggu", "Setting spin masih dimuat...");
+      return;
+    }
+
     if (!canSpin) {
       Alert.alert(
         "Spin Ditutup",
-        "Spin hanya bisa dilakukan sebelum tanggal 11."
+        `Spin hanya bisa dilakukan sebelum tanggal ${sebelumTanggal}.`
       );
       return;
     }
 
-    const hadiah = [0, 10000, 20000, 50000, 100000];
-    const hasil = hadiah[Math.floor(Math.random() * hadiah.length)];
+    if (!selected) return;
 
+    const picked = pickByWeight(hadiah);
+    if (!picked) {
+      Alert.alert("Gagal", "Data hadiah kosong / peluang 0 semua.");
+      return;
+    }
+
+    // ✅ saat ini baru tampilkan hasil
+    // Next step: simpan ke Firestore (misal students/{id}/spins/{YYYY-MM})
     Alert.alert(
       "🎁 Hasil Spin",
-      `${selected?.name}\nPotongan bulan depan: ${rupiah(hasil)}`
+      `${selected.name}\nHadiah: ${picked.label}\nPotongan ${
+        dipakaiBulanDepan ? "bulan depan" : "bulan ini"
+      }: ${rupiah(picked.nominal)}`
     );
+
     setModalOpen(false);
   }
 
@@ -148,7 +239,9 @@ export default function BayarSPP() {
           ))}
         </View>
 
-        <Text style={styles.note}>ℹ️ Spin hanya aktif sebelum tanggal 11.</Text>
+        <Text style={styles.note}>
+          ℹ️ Spin hanya aktif sebelum tanggal {sebelumTanggal}.
+        </Text>
       </ScrollView>
 
       {/* MODAL AKSI */}
@@ -168,13 +261,17 @@ export default function BayarSPP() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.spinBtn, !canSpin && { opacity: 0.4 }]}
+                  style={[
+                    styles.spinBtn,
+                    (!canSpin || spinLoading) && { opacity: 0.4 },
+                  ]}
                   onPress={spinHadiah}
-                  disabled={!canSpin}
+                  disabled={!canSpin || spinLoading}
                 >
                   <Ionicons name="gift-outline" size={18} color="#0F172A" />
                   <Text style={styles.spinText}>
-                    Spin (Potongan Bulan Depan)
+                    Spin (Potongan{" "}
+                    {dipakaiBulanDepan ? "Bulan Depan" : "Bulan Ini"})
                   </Text>
                 </TouchableOpacity>
 
@@ -184,6 +281,12 @@ export default function BayarSPP() {
                 >
                   <Text style={styles.closeText}>Tutup</Text>
                 </TouchableOpacity>
+
+                {spinLoading && (
+                  <Text style={[styles.note, { marginTop: 10 }]}>
+                    Memuat setting spin...
+                  </Text>
+                )}
               </>
             )}
           </View>

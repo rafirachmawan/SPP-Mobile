@@ -48,6 +48,16 @@ export default function MasterMenu() {
       icon: "cash-outline",
       href: "/superadmin/setting-spp",
     },
+
+    // ✅ BARU: TAMBAH / KELOLA SISWA (INPUT SISWA PER CABANG)
+    {
+      title: "Tambah / Kelola Siswa",
+      desc: "Tambah siswa berdasarkan cabang & kelola daftar siswa.",
+      icon: "person-add-outline",
+      href: "/superadmin/tambah-siswa",
+    },
+
+    // tetap ada: lihat siswa per cabang
     {
       title: "Lihat Siswa per Cabang",
       desc: "Cek daftar siswa berdasarkan cabang.",
@@ -101,7 +111,8 @@ export default function MasterMenu() {
             color="#0F172A"
           />
           <Text style={styles.noteText}>
-            Semua data masih dummy. Fokus UI dulu, database menyusul.
+            Pastikan rules Firestore sudah mengizinkan SUPERADMIN mengelola data
+            (branches, branch_admins, students, spin_settings, dll).
           </Text>
         </View>
 

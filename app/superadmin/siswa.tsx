@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,14 +7,30 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
+// ✅ Firebase
+import { db } from "../../firebase"; // ✅ sesuaikan path
+import {
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+  Timestamp,
+  limit,
+} from "firebase/firestore";
+
+type Cabang = { id: string; nama: string };
+
 type Student = {
   id: string;
   name: string;
-  cabang: string;
+  cabangId: string;
+  cabangNama: string; // hasil join dari branches
   tipe: string;
   spp: number;
 };
@@ -66,65 +82,123 @@ function genHistoryDummy(spp: number) {
 }
 
 export default function SiswaByCabangPage() {
-  const cabangList = useMemo(
-    () => ["Semua", "Cabang A", "Cabang B", "Cabang C"],
-    []
-  );
+  // ====== CABANG dari Firestore (branches) ======
+  const [cabangRows, setCabangRows] = useState<Cabang[]>([]);
+  const [loadingCabang, setLoadingCabang] = useState(true);
 
-  const siswaAll = useMemo<Student[]>(
-    () => [
-      {
-        id: "S1",
-        name: "ANAK A",
-        cabang: "Cabang A",
-        tipe: "Normal",
-        spp: 200000,
-      },
-      {
-        id: "S2",
-        name: "ANAK B",
-        cabang: "Cabang A",
-        tipe: "Beasiswa 0",
-        spp: 0,
-      },
-      {
-        id: "S3",
-        name: "ANAK C",
-        cabang: "Cabang B",
-        tipe: "Pertemuan (8x)",
-        spp: 150000,
-      },
-      {
-        id: "S4",
-        name: "ANAK D",
-        cabang: "Cabang C",
-        tipe: "Beasiswa 100",
-        spp: 100000,
-      },
-      {
-        id: "S5",
-        name: "ANAK E",
-        cabang: "Cabang C",
-        tipe: "Normal",
-        spp: 200000,
-      },
-    ],
-    []
-  );
+  // ====== SISWA dari Firestore (students) ======
+  const [siswaAll, setSiswaAll] = useState<Student[]>([]);
+  const [loadingSiswa, setLoadingSiswa] = useState(true);
 
-  const [cabang, setCabang] = useState("Semua");
+  const [cabang, setCabang] = useState<string>("Semua"); // "Semua" atau cabangId
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Student | null>(null);
 
+  // ===================== LOAD CABANG (branches) =====================
+  useEffect(() => {
+    setLoadingCabang(true);
+    const qRef = query(collection(db, "branches"), orderBy("createdAt", "asc"));
+
+    const unsub = onSnapshot(
+      qRef,
+      (snap) => {
+        const rows: Cabang[] = snap.docs.map((d) => {
+          const data = d.data() as any;
+          return { id: d.id, nama: String(data.name || "").trim() };
+        });
+        setCabangRows(rows);
+        setLoadingCabang(false);
+      },
+      (err) => {
+        console.log(err);
+        setLoadingCabang(false);
+        Alert.alert("Gagal", "Tidak bisa mengambil data cabang.");
+      }
+    );
+
+    return () => unsub();
+  }, []);
+
+  // cabangList utk pills (Semua + hasil branches)
+  const cabangList = useMemo(() => {
+    const base = [{ id: "Semua", nama: "Semua" }];
+    return base.concat(cabangRows);
+  }, [cabangRows]);
+
+  // helper nama cabang dari id
+  const cabangNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    cabangRows.forEach((c) => map.set(c.id, c.nama));
+    return (id: string) => map.get(id) || "-";
+  }, [cabangRows]);
+
+  // ===================== LOAD SISWA (students) =====================
+  // SUPERADMIN: bisa load semua siswa (lalu difilter di UI)
+  useEffect(() => {
+    setLoadingSiswa(true);
+
+    // ✅ kalau koleksi kamu bukan "students", ganti di sini
+    const qRef = query(collection(db, "students"), orderBy("name", "asc"));
+
+    const unsub = onSnapshot(
+      qRef,
+      (snap) => {
+        const rows: Student[] = snap.docs.map((d) => {
+          const data = d.data() as any;
+
+          const cabangId = String(data.cabangId || data.branchId || "").trim();
+          const name = String(data.name || data.nama || "").trim();
+
+          const tipe = String(data.tipe || data.type || "Normal");
+          const spp =
+            Number(data.sppDefault ?? data.spp ?? data.nominalSpp ?? 0) || 0;
+
+          return {
+            id: d.id,
+            name,
+            cabangId,
+            cabangNama: cabangId ? cabangNameById(cabangId) : "-",
+            tipe,
+            spp,
+          };
+        });
+
+        // update cabangNama lagi setelah map siap (kalau cabang baru ke-load belakangan)
+        const fixed = rows.map((r) => ({
+          ...r,
+          cabangNama: r.cabangId ? cabangNameById(r.cabangId) : "-",
+        }));
+
+        setSiswaAll(fixed);
+        setLoadingSiswa(false);
+      },
+      (err) => {
+        console.log(err);
+        setLoadingSiswa(false);
+        Alert.alert("Gagal", "Tidak bisa mengambil data siswa.");
+      }
+    );
+
+    return () => unsub();
+    // penting: cabangNameById berubah saat cabangRows berubah
+  }, [cabangNameById]);
+
+  // ===== list siswa sesuai filter cabang + search =====
   const list = useMemo(() => {
     let base = siswaAll;
-    if (cabang !== "Semua") base = base.filter((x) => x.cabang === cabang);
+
+    // cabang state berisi "Semua" atau cabangId
+    if (cabang !== "Semua") {
+      base = base.filter((x) => x.cabangId === cabang);
+    }
 
     const qq = q.trim().toLowerCase();
     if (!qq) return base;
+
     return base.filter((x) => x.name.toLowerCase().includes(qq));
   }, [siswaAll, cabang, q]);
 
+  // dummy history tetap
   const history = useMemo(
     () => (selected ? genHistoryDummy(selected.spp) : []),
     [selected]
@@ -152,31 +226,41 @@ export default function SiswaByCabangPage() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Filter Cabang</Text>
 
-          <View style={styles.pillsRow}>
-            {cabangList.map((c) => {
-              const active = c === cabang;
-              return (
-                <TouchableOpacity
-                  key={c}
-                  activeOpacity={0.9}
-                  onPress={() => {
-                    setCabang(c);
-                    setSelected(null);
-                  }}
-                  style={[
-                    styles.pill,
-                    active ? styles.pillActive : styles.pillNormal,
-                  ]}
-                >
-                  <Text
-                    style={[styles.pillText, active && { color: "#0F172A" }]}
+          {loadingCabang ? (
+            <Text style={[styles.note, { marginTop: 10 }]}>
+              Memuat cabang...
+            </Text>
+          ) : cabangList.length <= 1 ? (
+            <Text style={[styles.note, { marginTop: 10 }]}>
+              Belum ada cabang. Tambah cabang dulu di fitur Tambah Cabang.
+            </Text>
+          ) : (
+            <View style={styles.pillsRow}>
+              {cabangList.map((c) => {
+                const active = c.id === cabang;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    activeOpacity={0.9}
+                    onPress={() => {
+                      setCabang(c.id);
+                      setSelected(null);
+                    }}
+                    style={[
+                      styles.pill,
+                      active ? styles.pillActive : styles.pillNormal,
+                    ]}
                   >
-                    {c}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                    <Text
+                      style={[styles.pillText, active && { color: "#0F172A" }]}
+                    >
+                      {c.nama}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
 
           <View style={styles.inputWrap}>
             <TextInput
@@ -198,22 +282,35 @@ export default function SiswaByCabangPage() {
             <Text style={styles.cardTitle}>Daftar Siswa</Text>
 
             <View style={{ marginTop: 12, gap: 10 }}>
-              {list.map((s) => (
-                <TouchableOpacity
-                  key={s.id}
-                  activeOpacity={0.9}
-                  style={styles.item}
-                  onPress={() => setSelected(s)}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.itemTitle}>{s.name}</Text>
-                    <Text style={styles.itemSub}>
-                      {s.cabang} • {s.tipe} • Rp {s.spp.toLocaleString("id-ID")}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
-                </TouchableOpacity>
-              ))}
+              {loadingSiswa ? (
+                <Text style={styles.note}>Memuat siswa...</Text>
+              ) : list.length === 0 ? (
+                <Text style={styles.note}>
+                  Tidak ada siswa untuk filter ini.
+                </Text>
+              ) : (
+                list.map((s) => (
+                  <TouchableOpacity
+                    key={s.id}
+                    activeOpacity={0.9}
+                    style={styles.item}
+                    onPress={() => setSelected(s)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.itemTitle}>{s.name}</Text>
+                      <Text style={styles.itemSub}>
+                        {s.cabangNama} • {s.tipe} • Rp{" "}
+                        {s.spp.toLocaleString("id-ID")}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={22}
+                      color="#94A3B8"
+                    />
+                  </TouchableOpacity>
+                ))
+              )}
             </View>
 
             <Text style={styles.note}>
@@ -231,7 +328,7 @@ export default function SiswaByCabangPage() {
 
             <Text style={styles.bigName}>{selected.name}</Text>
             <Text style={styles.meta}>
-              {selected.cabang} • {selected.tipe} • SPP Rp{" "}
+              {selected.cabangNama} • {selected.tipe} • SPP Rp{" "}
               {selected.spp.toLocaleString("id-ID")}
             </Text>
 
