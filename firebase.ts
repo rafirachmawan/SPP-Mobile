@@ -3,6 +3,7 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import type { FirebaseApp } from "firebase/app";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB1p-Sq0QHX2gkbIVI0-WHRidWARF1zgno",
@@ -25,3 +26,5 @@ export function getSecondaryAuth() {
   if (!secondaryApp) secondaryApp = initializeApp(firebaseConfig, "SECONDARY");
   return getAuth(secondaryApp);
 }
+
+export const storage = getStorage(app);

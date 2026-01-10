@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -6,34 +6,148 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
+// ✅ Firebase
+import { auth, db } from "../../firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { signOut as signOutAuth } from "firebase/auth";
+
+type Profile = {
+  uid: string;
+  nama: string;
+  username: string;
+  role: string;
+  active: boolean;
+  branchId: string; // cabangId/branchId diseragamkan ke branchId
+};
+
 export default function TabAkun() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const tabH = useBottomTabBarHeight();
 
-  // ✅ dummy data (nanti ambil dari Firebase session)
-  const admin = {
-    nama: "Admin Cabang",
-    cabang: "Shining Sun - Cabang A",
-    email: "admin@shiningsun.com",
-  };
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [branchName, setBranchName] = useState<string>("-");
 
-  function onLogout() {
+  // ===================== LOAD PROFILE USER LOGIN =====================
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const u = auth.currentUser;
+        if (!u) {
+          // kalau belum login, lempar ke login
+          if (mounted) router.replace("/login");
+          return;
+        }
+
+        // ambil data user
+        const uRef = doc(db, "users", u.uid);
+        const uSnap = await getDoc(uRef);
+
+        if (!uSnap.exists()) {
+          Alert.alert("Gagal", "Data user tidak ditemukan di users.");
+          if (mounted) router.replace("/login");
+          return;
+        }
+
+        const data = uSnap.data() as any;
+
+        // aturan umum
+        const active = data.active !== false;
+        if (!active) {
+          Alert.alert("Akun Nonaktif", "Akun kamu sedang dinonaktifkan.");
+          await signOutAuth(auth).catch(() => {});
+          if (mounted) router.replace("/login");
+          return;
+        }
+
+        const branchId = String(data.cabangId || data.branchId || "").trim();
+
+        const prof: Profile = {
+          uid: u.uid,
+          nama: String(data.nama || data.name || "Admin").trim(),
+          username: String(data.username || "").trim(),
+          role: String(data.role || "").trim(),
+          active,
+          branchId,
+        };
+
+        if (mounted) setProfile(prof);
+
+        // ambil nama cabang
+        if (branchId) {
+          const bRef = doc(db, "branches", branchId);
+          const bSnap = await getDoc(bRef);
+          if (bSnap.exists()) {
+            const b = bSnap.data() as any;
+            if (mounted) setBranchName(String(b.name || "-").trim() || "-");
+          } else {
+            if (mounted) setBranchName("-");
+          }
+        } else {
+          if (mounted) setBranchName("-");
+        }
+      } catch (e: any) {
+        console.log(e);
+        Alert.alert("Gagal", e?.message || "Tidak bisa memuat data akun.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
+  const emailInternal = useMemo(() => {
+    // admin cabang kamu dibuat pakai email internal: `${username}@cabang.spp`
+    if (!profile?.username) return "-";
+    return `${profile.username}@cabang.spp`;
+  }, [profile]);
+
+  const roleLabel = useMemo(() => {
+    const r = String(profile?.role || "").toUpperCase();
+    if (r === "ADMIN_CABANG") return "Admin Cabang";
+    if (r === "SUPERADMIN") return "Superadmin";
+    if (r === "SISWA") return "Siswa";
+    return r || "-";
+  }, [profile]);
+
+  async function onLogout() {
     Alert.alert("Logout", "Keluar dari akun?", [
       { text: "Batal", style: "cancel" },
       {
         text: "Keluar",
         style: "destructive",
-        onPress: () => router.replace("/login"),
+        onPress: async () => {
+          try {
+            await signOutAuth(auth);
+          } catch (e) {
+            // ignore
+          } finally {
+            router.replace("/login");
+          }
+        },
       },
     ]);
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
         start={{ x: 0, y: 0 }}
@@ -41,7 +155,16 @@ export default function TabAkun() {
         style={StyleSheet.absoluteFill}
       />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingTop: Math.max(insets.top, 14),
+            paddingBottom: tabH + insets.bottom + 18,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <Text style={styles.brand}>Shining Sun 🎈</Text>
           <View style={styles.chip}>
@@ -55,45 +178,79 @@ export default function TabAkun() {
         </Text>
 
         <View style={styles.card}>
-          <View style={styles.avatarRow}>
-            <View style={styles.avatar}>
-              <Ionicons name="person" size={22} color="#1E40AF" />
+          {loading ? (
+            <View style={{ alignItems: "center", paddingVertical: 18 }}>
+              <ActivityIndicator />
+              <Text style={[styles.note, { marginTop: 10 }]}>
+                Memuat akun...
+              </Text>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{admin.nama}</Text>
-              <Text style={styles.sub}>{admin.cabang}</Text>
-            </View>
-          </View>
+          ) : !profile ? (
+            <Text style={styles.note}>Akun tidak ditemukan.</Text>
+          ) : (
+            <>
+              <View style={styles.avatarRow}>
+                <View style={styles.avatar}>
+                  <Ionicons name="person" size={22} color="#1E40AF" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.name}>{profile.nama}</Text>
+                  <Text style={styles.sub}>
+                    {roleLabel} • {branchName}
+                  </Text>
+                </View>
+              </View>
 
-          <View style={styles.hr} />
+              <View style={styles.hr} />
 
-          <View style={styles.line}>
-            <Ionicons name="mail-outline" size={18} color="#64748B" />
-            <Text style={styles.lineText}>{admin.email}</Text>
-          </View>
+              <View style={styles.line}>
+                <Ionicons name="mail-outline" size={18} color="#64748B" />
+                <Text style={styles.lineText}>{emailInternal}</Text>
+              </View>
 
-          <View style={styles.line}>
-            <Ionicons name="location-outline" size={18} color="#64748B" />
-            <Text style={styles.lineText}>{admin.cabang}</Text>
-          </View>
+              <View style={styles.line}>
+                <Ionicons
+                  name="person-circle-outline"
+                  size={18}
+                  color="#64748B"
+                />
+                <Text style={styles.lineText}>@{profile.username || "-"}</Text>
+              </View>
 
-          <TouchableOpacity
-            activeOpacity={0.9}
-            style={styles.logoutBtn}
-            onPress={onLogout}
-          >
-            <Ionicons name="log-out-outline" size={18} color="#fff" />
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
+              <View style={styles.line}>
+                <Ionicons name="location-outline" size={18} color="#64748B" />
+                <Text style={styles.lineText}>{branchName}</Text>
+              </View>
 
-          <Text style={styles.note}>
-            * Nanti data akun (cabang/role) diambil dari Firebase login admin.
-          </Text>
+              <View style={styles.line}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={18}
+                  color="#64748B"
+                />
+                <Text style={styles.lineText}>{roleLabel}</Text>
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.logoutBtn}
+                onPress={onLogout}
+              >
+                <Ionicons name="log-out-outline" size={18} color="#fff" />
+                <Text style={styles.logoutText}>Logout</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.note}>
+                * Data diambil dari Firestore (users/{profile.uid} + branches/
+                {profile.branchId || "-"}).
+              </Text>
+            </>
+          )}
         </View>
 
         <View style={{ height: 12 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
