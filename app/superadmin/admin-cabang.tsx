@@ -9,6 +9,11 @@ import {
   Alert,
   Platform,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -46,6 +51,9 @@ function normalizeUsername(u: string) {
 }
 
 export default function AdminCabangPage() {
+  const insets = useSafeAreaInsets();
+  const tabH = useBottomTabBarHeight();
+
   const [cabang, setCabang] = useState<Cabang[]>([]);
   const [items, setItems] = useState<AdminCabang[]>([]);
   const [loadingCabang, setLoadingCabang] = useState(true);
@@ -256,7 +264,7 @@ export default function AdminCabangPage() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
         start={{ x: 0, y: 0 }}
@@ -265,8 +273,17 @@ export default function AdminCabangPage() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            // ✅ atas aman notch/status bar
+            paddingTop: Math.max(insets.top, 14),
+            // ✅ bawah aman dari tabbar + gesture bar
+            paddingBottom: tabH + insets.bottom + 18,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <Header
           title="Admin Cabang"
@@ -472,7 +489,7 @@ export default function AdminCabangPage() {
 
         <View style={{ height: Platform.OS === "ios" ? 8 : 16 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -9,6 +9,11 @@ import {
   Platform,
   Alert,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -20,8 +25,6 @@ import {
   orderBy,
   query,
   where,
-  Timestamp,
-  limit,
 } from "firebase/firestore";
 
 type Cabang = { id: string; nama: string };
@@ -82,6 +85,9 @@ function genHistoryDummy(spp: number) {
 }
 
 export default function SiswaByCabangPage() {
+  const insets = useSafeAreaInsets();
+  const tabH = useBottomTabBarHeight();
+
   // ====== CABANG dari Firestore (branches) ======
   const [cabangRows, setCabangRows] = useState<Cabang[]>([]);
   const [loadingCabang, setLoadingCabang] = useState(true);
@@ -133,11 +139,9 @@ export default function SiswaByCabangPage() {
   }, [cabangRows]);
 
   // ===================== LOAD SISWA (students) =====================
-  // SUPERADMIN: bisa load semua siswa (lalu difilter di UI)
   useEffect(() => {
     setLoadingSiswa(true);
 
-    // ✅ kalau koleksi kamu bukan "students", ganti di sini
     const qRef = query(collection(db, "students"), orderBy("name", "asc"));
 
     const unsub = onSnapshot(
@@ -163,7 +167,6 @@ export default function SiswaByCabangPage() {
           };
         });
 
-        // update cabangNama lagi setelah map siap (kalau cabang baru ke-load belakangan)
         const fixed = rows.map((r) => ({
           ...r,
           cabangNama: r.cabangId ? cabangNameById(r.cabangId) : "-",
@@ -180,14 +183,12 @@ export default function SiswaByCabangPage() {
     );
 
     return () => unsub();
-    // penting: cabangNameById berubah saat cabangRows berubah
   }, [cabangNameById]);
 
   // ===== list siswa sesuai filter cabang + search =====
   const list = useMemo(() => {
     let base = siswaAll;
 
-    // cabang state berisi "Semua" atau cabangId
     if (cabang !== "Semua") {
       base = base.filter((x) => x.cabangId === cabang);
     }
@@ -198,14 +199,13 @@ export default function SiswaByCabangPage() {
     return base.filter((x) => x.name.toLowerCase().includes(qq));
   }, [siswaAll, cabang, q]);
 
-  // dummy history tetap
   const history = useMemo(
     () => (selected ? genHistoryDummy(selected.spp) : []),
     [selected]
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
         start={{ x: 0, y: 0 }}
@@ -214,8 +214,15 @@ export default function SiswaByCabangPage() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingTop: Math.max(insets.top, 14),
+            paddingBottom: tabH + insets.bottom + 18,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <Header
           title="Siswa per Cabang"
@@ -379,7 +386,7 @@ export default function SiswaByCabangPage() {
 
         <View style={{ height: Platform.OS === "ios" ? 8 : 16 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -398,6 +405,7 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
+// ✅ styles kamu biarkan sama persis
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
 
@@ -502,7 +510,12 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontWeight: "900", fontSize: 12, color: "#0F172A" },
 
-  bigName: { marginTop: 10, fontWeight: "900", color: "#0F172A", fontSize: 18 },
+  bigName: {
+    marginTop: 10,
+    fontWeight: "900",
+    color: "#0F172A",
+    fontSize: 18,
+  },
   meta: { marginTop: 6, color: "#64748B", fontWeight: "800" },
 
   hr: {

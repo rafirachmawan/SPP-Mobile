@@ -6,6 +6,11 @@ import {
   ScrollView,
   TouchableOpacity,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -22,6 +27,8 @@ const THEME = {
 
 export default function MasterMenu() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const tabH = useBottomTabBarHeight();
 
   // ✅ Setting SPP dihapus dari Master (karena sudah disetting saat bikin siswa)
   const items = [
@@ -43,16 +50,12 @@ export default function MasterMenu() {
       icon: "gift-outline",
       href: "/superadmin/spin",
     },
-
-    // ✅ BARU: TAMBAH / KELOLA SISWA (INPUT SISWA PER CABANG)
     {
       title: "Tambah / Kelola Siswa",
       desc: "Tambah siswa berdasarkan cabang & kelola daftar siswa.",
       icon: "person-add-outline",
       href: "/superadmin/tambah-siswa",
     },
-
-    // tetap ada: lihat siswa per cabang
     {
       title: "Lihat Siswa per Cabang",
       desc: "Cek daftar siswa berdasarkan cabang.",
@@ -62,7 +65,7 @@ export default function MasterMenu() {
   ];
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={[THEME.bg1, THEME.bg2, THEME.bg3]}
         start={{ x: 0, y: 0 }}
@@ -71,8 +74,17 @@ export default function MasterMenu() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            // ✅ biar teks atas gak ketutup (status bar/notch)
+            paddingTop: Math.max(insets.top, 14),
+            // ✅ biar bawah aman dari tabbar + gesture bar
+            paddingBottom: tabH + insets.bottom + 18,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.title}>Menu Master</Text>
         <Text style={styles.subtitle}>Kelola fitur utama Superadmin.</Text>
@@ -113,15 +125,15 @@ export default function MasterMenu() {
 
         <View style={{ height: 12 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 26,
+    paddingTop: 18, // akan dioverride oleh insets.top di atas
+    paddingBottom: 26, // akan dioverride oleh tabH + insets.bottom di atas
   },
   title: {
     fontSize: 26,

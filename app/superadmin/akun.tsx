@@ -7,17 +7,26 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 export default function SuperadminAkun() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const tabH = useBottomTabBarHeight();
 
   const user = {
     nama: "Super Admin",
-    email: "superadmin@shiningsun.com",
+    email: "superadmin@spp.com",
     role: "SUPERADMIN",
+    phone: "08xx-xxxx-xxxx",
+    appVer: "1.0.0",
   };
 
   function onLogout() {
@@ -32,7 +41,7 @@ export default function SuperadminAkun() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
         start={{ x: 0, y: 0 }}
@@ -40,7 +49,17 @@ export default function SuperadminAkun() {
         style={StyleSheet.absoluteFill}
       />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingTop: Math.max(insets.top, 14),
+            paddingBottom: tabH + insets.bottom + 18,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.header}>
           <Text style={styles.brand}>SPP Mobile</Text>
           <View style={styles.chip}>
@@ -53,6 +72,7 @@ export default function SuperadminAkun() {
           Informasi akun superadmin yang sedang login.
         </Text>
 
+        {/* Profile Card */}
         <View style={styles.card}>
           <View style={styles.avatarRow}>
             <View style={styles.avatar}>
@@ -66,10 +86,58 @@ export default function SuperadminAkun() {
 
           <View style={styles.hr} />
 
-          <View style={styles.line}>
-            <Ionicons name="mail-outline" size={18} color="#64748B" />
-            <Text style={styles.lineText}>{user.email}</Text>
-          </View>
+          <InfoLine icon="mail-outline" label="Email" value={user.email} />
+          <InfoLine icon="call-outline" label="Telepon" value={user.phone} />
+
+          <InfoLine
+            icon="information-circle-outline"
+            label="Versi Aplikasi"
+            value={user.appVer}
+          />
+
+          <View style={styles.hr2} />
+
+          {/* Quick actions */}
+          <Text style={styles.sectionTitle}>Pengaturan</Text>
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={styles.actionRow}
+            onPress={() =>
+              Alert.alert("Info", "Nanti: ganti password (Firebase).")
+            }
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons name="key-outline" size={18} color="#1E40AF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionTitle}>Ganti Password</Text>
+              <Text style={styles.actionDesc}>
+                Ubah password akun superadmin.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={styles.actionRow}
+            onPress={() =>
+              Alert.alert(
+                "Info",
+                "Nanti: sinkron akun + ambil data profil dari Firebase/Firestore."
+              )
+            }
+          >
+            <View style={styles.actionIcon}>
+              <Ionicons name="sync-outline" size={18} color="#1E40AF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionTitle}>Sync Profil</Text>
+              <Text style={styles.actionDesc}>Tarik data profil terbaru.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
 
           <TouchableOpacity
             activeOpacity={0.9}
@@ -81,12 +149,50 @@ export default function SuperadminAkun() {
           </TouchableOpacity>
 
           <Text style={styles.note}>
-            * Ini UI dummy dulu. Nanti data dari Firebase.
+            * UI dibuat lebih “penuh”, data asli nanti dari Firebase.
+          </Text>
+        </View>
+
+        {/* Extra Card (biar gak kosong) */}
+        <View style={styles.cardSoft}>
+          <View style={styles.tipRow}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={18}
+              color="#0F172A"
+            />
+            <Text style={styles.tipTitle}>Tips Keamanan</Text>
+          </View>
+          <Text style={styles.tipText}>
+            Jangan bagikan password ke admin cabang. Aktifkan kebijakan password
+            kuat dan rutin ganti password tiap 1–3 bulan.
           </Text>
         </View>
 
         <View style={{ height: 12 }} />
       </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function InfoLine({
+  icon,
+  label,
+  value,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.lineRow}>
+      <View style={styles.lineIcon}>
+        <Ionicons name={icon} size={16} color="#64748B" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.lineLabel}>{label}</Text>
+        <Text style={styles.lineValue}>{value}</Text>
+      </View>
     </View>
   );
 }
@@ -111,12 +217,12 @@ const styles = StyleSheet.create({
   },
   chipText: { color: "#1E40AF", fontWeight: "900", fontSize: 12 },
 
-  title: { fontSize: 26, fontWeight: "900", color: "#0F172A", marginTop: 10 },
+  title: { fontSize: 26, fontWeight: "900", color: "#0F172A", marginTop: 8 },
   subtitle: {
     color: "#64748B",
     lineHeight: 20,
     fontWeight: "700",
-    marginTop: 2,
+    marginTop: 4,
   },
 
   card: {
@@ -131,11 +237,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 2,
   },
+  cardSoft: {
+    backgroundColor: "rgba(255,255,255,0.78)",
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+  },
 
   avatarRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   avatar: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 16,
     backgroundColor: "rgba(219,234,254,0.95)",
     borderWidth: 1,
@@ -144,20 +257,71 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   name: { fontWeight: "900", color: "#0F172A", fontSize: 16 },
-  sub: { marginTop: 4, color: "#64748B", fontWeight: "700" },
+  sub: { marginTop: 4, color: "#64748B", fontWeight: "800" },
 
   hr: {
     height: 1,
     backgroundColor: "rgba(226,232,240,0.95)",
     marginTop: 14,
+    marginBottom: 10,
+  },
+  hr2: {
+    height: 1,
+    backgroundColor: "rgba(226,232,240,0.95)",
+    marginTop: 12,
     marginBottom: 12,
   },
 
-  line: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
-  lineText: { color: "#0F172A", fontWeight: "800" },
+  lineRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 10,
+  },
+  lineIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 14,
+    backgroundColor: "rgba(226,232,240,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lineLabel: { color: "#64748B", fontWeight: "900", fontSize: 12 },
+  lineValue: { marginTop: 2, color: "#0F172A", fontWeight: "900" },
+
+  sectionTitle: { marginTop: 2, fontWeight: "900", color: "#0F172A" },
+
+  actionRow: {
+    marginTop: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 18,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  actionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: "rgba(219,234,254,0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(191,219,254,1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionTitle: { fontWeight: "900", color: "#0F172A" },
+  actionDesc: {
+    marginTop: 2,
+    color: "#64748B",
+    fontWeight: "800",
+    fontSize: 12,
+  },
 
   logoutBtn: {
-    marginTop: 16,
+    marginTop: 14,
     backgroundColor: "#EF4444",
     paddingVertical: 14,
     borderRadius: 18,
@@ -174,5 +338,14 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     fontWeight: "700",
     fontSize: 12,
+  },
+
+  tipRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  tipTitle: { fontWeight: "900", color: "#0F172A" },
+  tipText: {
+    marginTop: 8,
+    color: "#475569",
+    fontWeight: "800",
+    lineHeight: 18,
   },
 });

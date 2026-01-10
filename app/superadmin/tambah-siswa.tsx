@@ -11,6 +11,11 @@ import {
   Platform,
   Modal,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -60,6 +65,9 @@ function rupiah(n: number) {
 }
 
 export default function TambahSiswaPage() {
+  const insets = useSafeAreaInsets();
+  const tabH = useBottomTabBarHeight();
+
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(true);
 
@@ -122,7 +130,6 @@ export default function TambahSiswaPage() {
 
     setLoadingStudents(true);
 
-    // tampilkan siswa sesuai cabang terpilih
     const qRef = query(
       collection(db, "students"),
       where("branchId", "==", branchId),
@@ -189,9 +196,6 @@ export default function TambahSiswaPage() {
       if (prt <= 0) return Alert.alert("Gagal", "Pertemuan harus > 0.");
     }
 
-    // aturan nominal default:
-    // - Beasiswa 0 => sppDefault otomatis 0
-    // - lainnya => boleh isi, kalau kosong dianggap 0
     const finalSpp = type === "Beasiswa 0" ? 0 : Number.isFinite(spp) ? spp : 0;
 
     try {
@@ -200,7 +204,6 @@ export default function TambahSiswaPage() {
       await addDoc(collection(db, "students"), {
         name: n,
         branchId,
-        // optional: simpan juga branchName biar cepat tampil di tempat lain
         branchName,
         type,
         sppDefault: finalSpp,
@@ -302,7 +305,7 @@ export default function TambahSiswaPage() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
         start={{ x: 0, y: 0 }}
@@ -311,8 +314,17 @@ export default function TambahSiswaPage() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            // ✅ aman notch/statusbar
+            paddingTop: Math.max(insets.top, 14),
+            // ✅ aman tabbar + gesture bar
+            paddingBottom: tabH + insets.bottom + 18,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <Header
           title="Tambah / Kelola Siswa"
@@ -707,7 +719,7 @@ export default function TambahSiswaPage() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 

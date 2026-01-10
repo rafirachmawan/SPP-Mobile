@@ -8,6 +8,11 @@ import {
   TextInput,
   Alert,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -32,6 +37,9 @@ function toInt(v: string, fallback = 0) {
 }
 
 export default function SpinSettingPage() {
+  const insets = useSafeAreaInsets();
+  const tabH = useBottomTabBarHeight();
+
   // ===== default dummy kalau belum ada data di Firestore =====
   const dummyHadiah = useMemo<Hadiah[]>(
     () => [
@@ -165,17 +173,13 @@ export default function SpinSettingPage() {
     if (items.length === 0)
       return Alert.alert("Gagal", "Minimal harus ada 1 hadiah.");
 
-    // ✅ aturan peluang: kamu bisa pilih mau wajib 100 atau warning
     if (total !== 100) {
       return Alert.alert(
         "Total peluang belum 100%",
         `Sekarang total: ${total}%.\n\nBiar adil, idealnya 100%.`,
         [
           { text: "Batal", style: "cancel" },
-          {
-            text: "Tetap Simpan",
-            onPress: () => doSave(tgl),
-          },
+          { text: "Tetap Simpan", onPress: () => doSave(tgl) },
         ]
       );
     }
@@ -217,7 +221,7 @@ export default function SpinSettingPage() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
         start={{ x: 0, y: 0 }}
@@ -226,8 +230,17 @@ export default function SpinSettingPage() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            // ✅ aman notch/statusbar
+            paddingTop: Math.max(insets.top, 14),
+            // ✅ aman dari tabbar + gesture bar
+            paddingBottom: tabH + insets.bottom + 18,
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <Header
           title="Hadiah Spin"
@@ -348,7 +361,6 @@ export default function SpinSettingPage() {
                     />
                   </View>
 
-                  {/* ✅ tambah input kuota */}
                   <Text style={[styles.label, { marginTop: 12 }]}>
                     Kuota (0 = unlimited)
                   </Text>
@@ -389,7 +401,6 @@ export default function SpinSettingPage() {
                         {h.kuota === 0 ? "∞" : h.kuota}
                       </Text>
 
-                      {/* ✅ editor kuota per hadiah (ringan, tanpa ubah flow lain) */}
                       <View style={styles.inlineRow}>
                         <Text style={styles.inlineLabel}>Ubah kuota</Text>
                         <View style={styles.inlineInputWrap}>
@@ -435,10 +446,8 @@ export default function SpinSettingPage() {
             </>
           )}
         </View>
-
-        <View style={{ height: 12 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
