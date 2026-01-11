@@ -1,3 +1,6 @@
+// FILE: app/superadmin/master.tsx  (atau sesuai route kamu)
+// ✅ FULL — pakai Inter fontFamily biar konsisten (tanpa ubah logika navigasi/items)
+
 import React from "react";
 import {
   View,
@@ -23,6 +26,14 @@ const THEME = {
   sub: "#64748B",
   border: "#E2E8F0",
   card: "rgba(255,255,255,0.92)",
+};
+
+// ✅ font map (pastikan Inter sudah di-load di Root Layout)
+const F = {
+  regular: "Inter_400Regular",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+  extrabold: "Inter_800ExtraBold",
 };
 
 export default function MasterMenu() {
@@ -117,10 +128,7 @@ export default function MasterMenu() {
             size={18}
             color="#0F172A"
           />
-          <Text style={styles.noteText}>
-            Pastikan rules Firestore sudah mengizinkan SUPERADMIN mengelola data
-            (branches, branch_admins, students, spin_settings, dll).
-          </Text>
+          <Text style={styles.noteText}>ShiningSun — Master</Text>
         </View>
 
         <View style={{ height: 12 }} />
@@ -137,13 +145,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontWeight: "900",
+    fontFamily: F.extrabold,
     color: THEME.text,
   },
   subtitle: {
     marginTop: 8,
     color: THEME.sub,
-    fontWeight: "700",
+    fontFamily: F.semibold,
     lineHeight: 20,
     maxWidth: 330,
   },
@@ -178,13 +186,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rowTitle: {
-    fontWeight: "900",
+    fontFamily: F.bold,
     color: THEME.text,
   },
   rowDesc: {
     marginTop: 2,
     color: THEME.sub,
-    fontWeight: "700",
+    fontFamily: F.semibold,
     fontSize: 12,
   },
   noteCard: {
@@ -201,7 +209,7 @@ const styles = StyleSheet.create({
   noteText: {
     flex: 1,
     color: "#475569",
-    fontWeight: "800",
+    fontFamily: F.bold,
     fontSize: 12,
     lineHeight: 16,
   },

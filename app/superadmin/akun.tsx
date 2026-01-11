@@ -1,3 +1,5 @@
+// FILE: app/superadmin/akun.tsx
+
 import React from "react";
 import {
   View,
@@ -15,6 +17,14 @@ import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+
+// 🎨 Font Map (Inter)
+const F = {
+  regular: "Inter_400Regular",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+  extrabold: "Inter_800ExtraBold",
+};
 
 export default function SuperadminAkun() {
   const router = useRouter();
@@ -88,7 +98,6 @@ export default function SuperadminAkun() {
 
           <InfoLine icon="mail-outline" label="Email" value={user.email} />
           <InfoLine icon="call-outline" label="Telepon" value={user.phone} />
-
           <InfoLine
             icon="information-circle-outline"
             label="Versi Aplikasi"
@@ -97,7 +106,6 @@ export default function SuperadminAkun() {
 
           <View style={styles.hr2} />
 
-          {/* Quick actions */}
           <Text style={styles.sectionTitle}>Pengaturan</Text>
 
           <TouchableOpacity
@@ -153,7 +161,6 @@ export default function SuperadminAkun() {
           </Text>
         </View>
 
-        {/* Extra Card (biar gak kosong) */}
         <View style={styles.cardSoft}>
           <View style={styles.tipRow}>
             <Ionicons
@@ -206,7 +213,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { fontWeight: "900", color: "#1D4ED8", letterSpacing: 0.3 },
+  brand: { fontFamily: F.extrabold, color: "#1D4ED8", letterSpacing: 0.3 },
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -215,13 +222,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
   },
-  chipText: { color: "#1E40AF", fontWeight: "900", fontSize: 12 },
+  chipText: { color: "#1E40AF", fontFamily: F.extrabold, fontSize: 12 },
 
-  title: { fontSize: 26, fontWeight: "900", color: "#0F172A", marginTop: 8 },
+  title: {
+    fontSize: 26,
+    fontFamily: F.extrabold,
+    color: "#0F172A",
+    marginTop: 8,
+  },
   subtitle: {
     color: "#64748B",
     lineHeight: 20,
-    fontWeight: "700",
+    fontFamily: F.semibold,
     marginTop: 4,
   },
 
@@ -231,11 +243,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2,
   },
   cardSoft: {
     backgroundColor: "rgba(255,255,255,0.78)",
@@ -256,8 +263,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  name: { fontWeight: "900", color: "#0F172A", fontSize: 16 },
-  sub: { marginTop: 4, color: "#64748B", fontWeight: "800" },
+  name: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 16 },
+  sub: { marginTop: 4, color: "#64748B", fontFamily: F.bold },
 
   hr: {
     height: 1,
@@ -286,10 +293,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  lineLabel: { color: "#64748B", fontWeight: "900", fontSize: 12 },
-  lineValue: { marginTop: 2, color: "#0F172A", fontWeight: "900" },
+  lineLabel: { color: "#64748B", fontFamily: F.extrabold, fontSize: 12 },
+  lineValue: { marginTop: 2, color: "#0F172A", fontFamily: F.extrabold },
 
-  sectionTitle: { marginTop: 2, fontWeight: "900", color: "#0F172A" },
+  sectionTitle: { marginTop: 2, fontFamily: F.extrabold, color: "#0F172A" },
 
   actionRow: {
     marginTop: 10,
@@ -312,11 +319,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  actionTitle: { fontWeight: "900", color: "#0F172A" },
+  actionTitle: { fontFamily: F.extrabold, color: "#0F172A" },
   actionDesc: {
     marginTop: 2,
     color: "#64748B",
-    fontWeight: "800",
+    fontFamily: F.bold,
     fontSize: 12,
   },
 
@@ -330,22 +337,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  logoutText: { color: "white", fontWeight: "900", fontSize: 15 },
+  logoutText: { color: "white", fontFamily: F.extrabold, fontSize: 15 },
 
   note: {
     marginTop: 12,
     textAlign: "center",
     color: "#94A3B8",
-    fontWeight: "700",
+    fontFamily: F.semibold,
     fontSize: 12,
   },
 
   tipRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  tipTitle: { fontWeight: "900", color: "#0F172A" },
+  tipTitle: { fontFamily: F.extrabold, color: "#0F172A" },
   tipText: {
     marginTop: 8,
     color: "#475569",
-    fontWeight: "800",
+    fontFamily: F.bold,
     lineHeight: 18,
   },
 });

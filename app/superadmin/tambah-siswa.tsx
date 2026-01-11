@@ -55,6 +55,14 @@ const TYPES: StudentType[] = [
   "Pertemuan",
 ];
 
+// 🎨 Font Map (Inter)
+const F = {
+  regular: "Inter_400Regular",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+  extrabold: "Inter_800ExtraBold",
+};
+
 function toInt(v: string, fallback = 0) {
   const n = Number(String(v || "").replace(/[^\d]/g, ""));
   return Number.isFinite(n) ? n : fallback;
@@ -747,7 +755,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { fontWeight: "900", color: "#1D4ED8", letterSpacing: 0.3 },
+  brand: { fontFamily: F.extrabold, color: "#1D4ED8", letterSpacing: 0.3 },
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -756,13 +764,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
   },
-  chipText: { color: "#1E40AF", fontWeight: "900", fontSize: 12 },
+  chipText: { color: "#1E40AF", fontFamily: F.extrabold, fontSize: 12 },
 
-  title: { fontSize: 26, fontWeight: "900", color: "#0F172A", marginTop: 10 },
+  title: {
+    fontSize: 26,
+    fontFamily: F.extrabold,
+    color: "#0F172A",
+    marginTop: 10,
+  },
   subtitle: {
     color: "#64748B",
     lineHeight: 20,
-    fontWeight: "700",
+    fontFamily: F.semibold,
     marginTop: 2,
   },
 
@@ -778,7 +791,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 2,
   },
-  cardTitle: { fontSize: 16, fontWeight: "900", color: "#0F172A" },
+  cardTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
 
   rowBetween: {
     flexDirection: "row",
@@ -796,7 +809,7 @@ const styles = StyleSheet.create({
   },
   pillActive: { backgroundColor: "#DBEAFE", borderColor: "#BFDBFE" },
   pillNormal: { backgroundColor: "#FFFFFF", borderColor: "#E2E8F0" },
-  pillText: { fontWeight: "900", color: "#64748B" },
+  pillText: { fontFamily: F.extrabold, color: "#64748B" },
 
   inputWrap: {
     marginTop: 12,
@@ -810,7 +823,7 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: "center",
   },
-  input: { fontSize: 14, color: "#0F172A", fontWeight: "700" },
+  input: { fontSize: 14, color: "#0F172A", fontFamily: F.semibold },
   rightIcon: {
     position: "absolute",
     right: 12,
@@ -830,7 +843,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  primaryText: { color: "white", fontWeight: "900", fontSize: 15 },
+  primaryText: { color: "white", fontFamily: F.extrabold, fontSize: 15 },
 
   formBox: {
     marginTop: 14,
@@ -841,7 +854,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(226,232,240,0.95)",
   },
 
-  label: { fontWeight: "900", color: "#0F172A" },
+  label: { fontFamily: F.extrabold, color: "#0F172A" },
   inputWrap2: {
     marginTop: 8,
     borderWidth: 1,
@@ -852,7 +865,7 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: "center",
   },
-  input2: { fontSize: 14, color: "#0F172A", fontWeight: "700" },
+  input2: { fontSize: 14, color: "#0F172A", fontFamily: F.semibold },
 
   saveBtn: {
     marginTop: 14,
@@ -864,7 +877,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  saveText: { color: "white", fontWeight: "900" },
+  saveText: { color: "white", fontFamily: F.extrabold },
 
   item: {
     backgroundColor: "#FFFFFF",
@@ -875,8 +888,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
   },
-  itemTitle: { fontWeight: "900", color: "#0F172A", fontSize: 15 },
-  itemSub: { marginTop: 4, color: "#64748B", fontWeight: "700" },
+  itemTitle: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 15 },
+  itemSub: { marginTop: 4, color: "#64748B", fontFamily: F.semibold },
 
   pillSmall: {
     alignSelf: "flex-start",
@@ -887,7 +900,7 @@ const styles = StyleSheet.create({
   },
   ok: { backgroundColor: "#DCFCE7", borderColor: "#BBF7D0" },
   off: { backgroundColor: "#FEE2E2", borderColor: "#FECACA" },
-  pillSmallText: { fontWeight: "900", fontSize: 12, color: "#0F172A" },
+  pillSmallText: { fontFamily: F.extrabold, fontSize: 12, color: "#0F172A" },
 
   smallBtn: {
     width: 40,
@@ -909,13 +922,13 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
   },
-  badgeText: { fontWeight: "900", fontSize: 12, color: "#0F172A" },
+  badgeText: { fontFamily: F.extrabold, fontSize: 12, color: "#0F172A" },
 
   note: {
     marginTop: 12,
     textAlign: "center",
     color: "#94A3B8",
-    fontWeight: "700",
+    fontFamily: F.semibold,
     fontSize: 12,
   },
 
@@ -936,7 +949,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
-  modalTitle: { fontSize: 16, fontWeight: "900", color: "#0F172A" },
+  modalTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
   xBtn: {
     width: 34,
     height: 34,
@@ -955,5 +968,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  saveAllText: { color: "white", fontWeight: "900", fontSize: 15 },
+  saveAllText: { color: "white", fontFamily: F.extrabold, fontSize: 15 },
 });

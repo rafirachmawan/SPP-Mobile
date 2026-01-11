@@ -1,11 +1,14 @@
-import React, { useMemo } from "react";
+// FILE: app/superadmin/index.tsx  (atau path dashboard superadmin kamu)
+// ✅ FULL VERSION — teks sudah pakai Inter (fontFamily), logika realtime tetap sama
+
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   View,
+  ActivityIndicator,
 } from "react-native";
 import {
   SafeAreaView,
@@ -16,23 +19,112 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
+// ✅ Firebase
+import { db } from "../../firebase";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+
+// ✅ font map (pastikan kamu sudah load Inter di Root layout / app entry)
+const F = {
+  regular: "Inter_400Regular",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+  extrabold: "Inter_800ExtraBold",
+};
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+function monthKeyOf(d: Date) {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+}
+function rupiah(n: number) {
+  return "Rp " + Number(n || 0).toLocaleString("id-ID");
+}
+
 export default function SuperadminDashboard() {
   const router = useRouter();
 
   const tabH = useBottomTabBarHeight(); // ✅ tinggi footbar dinamis
   const insets = useSafeAreaInsets(); // ✅ aman untuk gesture/home bar Android
 
-  // ✅ dummy ringkasan (nanti dari database)
-  const summary = useMemo(
-    () => ({
-      cabang: 5,
-      admin: 7,
-      siswa: 512,
-      bayarBulanIni: 126,
-      spinDipakai: 34,
-    }),
-    []
-  );
+  const mkNow = useMemo(() => monthKeyOf(new Date()), []);
+
+  // ✅ realtime summary (bukan dummy)
+  const [summary, setSummary] = useState({
+    cabang: 0,
+    admin: 0,
+    siswa: 0,
+    bayarBulanIniNominal: 0, // ✅ total nominal semua cabang
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+
+    // 1) Total cabang realtime
+    const unsubBranches = onSnapshot(
+      collection(db, "branches"),
+      (snap) => {
+        setSummary((p) => ({ ...p, cabang: snap.size }));
+      },
+      (err) => console.log("branches err:", err)
+    );
+
+    // 2) Total admin cabang realtime
+    const qAdmins = query(
+      collection(db, "users"),
+      where("role", "==", "ADMIN_CABANG")
+    );
+    const unsubAdmins = onSnapshot(
+      qAdmins,
+      (snap) => {
+        const count = snap.docs.filter(
+          (d) => (d.data() as any)?.active !== false
+        ).length;
+        setSummary((p) => ({ ...p, admin: count }));
+      },
+      (err) => console.log("admins err:", err)
+    );
+
+    // 3) Total siswa realtime
+    const unsubStudents = onSnapshot(
+      collection(db, "students"),
+      (snap) => {
+        setSummary((p) => ({ ...p, siswa: snap.size }));
+      },
+      (err) => console.log("students err:", err)
+    );
+
+    // 4) ✅ Nominal bayar bulan ini (TOTAL semua cabang) realtime
+    const qInvoices = query(
+      collection(db, "invoices"),
+      where("monthKey", "==", mkNow),
+      where("status", "==", "PAID")
+    );
+    const unsubInvoices = onSnapshot(
+      qInvoices,
+      (snap) => {
+        let total = 0;
+        snap.docs.forEach((d) => {
+          const data = d.data() as any;
+          total += Number(data.total || 0) || 0;
+        });
+        setSummary((p) => ({ ...p, bayarBulanIniNominal: total }));
+        setLoading(false);
+      },
+      (err) => {
+        console.log("invoices err:", err);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      unsubBranches();
+      unsubAdmins();
+      unsubStudents();
+      unsubInvoices();
+    };
+  }, [mkNow]);
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
@@ -63,39 +155,48 @@ export default function SuperadminDashboard() {
 
         <Text style={styles.title}>Dashboard</Text>
         <Text style={styles.subtitle}>
-          Kelola cabang, admin cabang, aturan spin, dan SPP global/per siswa.
+          Ringkasan realtime seluruh cabang (admin, siswa, dan total pembayaran
+          bulan ini).
         </Text>
 
         {/* Summary cards */}
         <View style={styles.grid}>
           <View style={styles.miniCard}>
             <Text style={styles.miniLabel}>Total Cabang</Text>
-            <Text style={styles.miniValue}>{summary.cabang}</Text>
+            {loading ? (
+              <MiniLoading />
+            ) : (
+              <Text style={styles.miniValue}>{summary.cabang}</Text>
+            )}
           </View>
 
           <View style={styles.miniCard}>
             <Text style={styles.miniLabel}>Admin Cabang</Text>
-            <Text style={styles.miniValue}>{summary.admin}</Text>
+            {loading ? (
+              <MiniLoading />
+            ) : (
+              <Text style={styles.miniValue}>{summary.admin}</Text>
+            )}
           </View>
 
           <View style={styles.miniCard}>
             <Text style={styles.miniLabel}>Total Siswa</Text>
-            <Text style={styles.miniValue}>{summary.siswa}</Text>
+            {loading ? (
+              <MiniLoading />
+            ) : (
+              <Text style={styles.miniValue}>{summary.siswa}</Text>
+            )}
           </View>
 
           <View style={styles.miniCard}>
             <Text style={styles.miniLabel}>Bayar Bulan Ini</Text>
-            <Text style={styles.miniValue}>{summary.bayarBulanIni}</Text>
-          </View>
-
-          <View style={styles.miniCard}>
-            <Text style={styles.miniLabel}>Spin Dipakai</Text>
-            <Text style={styles.miniValue}>{summary.spinDipakai}</Text>
-          </View>
-
-          <View style={[styles.miniCard, styles.miniCardAlt]}>
-            <Text style={styles.miniLabel}>Info</Text>
-            <Text style={styles.miniSmall}>UI dulu, database nanti.</Text>
+            {loading ? (
+              <MiniLoading />
+            ) : (
+              <Text style={styles.miniValue}>
+                {rupiah(summary.bayarBulanIniNominal)}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -144,29 +245,25 @@ export default function SuperadminDashboard() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={styles.noteCard}
-          onPress={() =>
-            Alert.alert(
-              "Catatan",
-              "Selanjutnya kita sambungkan Firebase + Spreadsheet realtime."
-            )
-          }
-        >
-          <Ionicons
-            name="information-circle-outline"
-            size={18}
-            color="#0F172A"
-          />
-          <Text style={styles.noteText}>
-            Semua data masih dummy. Fokus UI dulu, database menyusul.
-          </Text>
-        </TouchableOpacity>
-
         <View style={{ height: 10 }} />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function MiniLoading() {
+  return (
+    <View
+      style={{
+        marginTop: 10,
+        flexDirection: "row",
+        gap: 8,
+        alignItems: "center",
+      }}
+    >
+      <ActivityIndicator size="small" />
+      <Text style={{ fontFamily: F.bold, color: "#0F172A" }}>Memuat...</Text>
+    </View>
   );
 }
 
@@ -199,12 +296,12 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 4,
-    paddingTop: 4, // ✅ biar header gak mepet status bar
+    paddingTop: 4,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { fontWeight: "900", color: "#1D4ED8", letterSpacing: 0.3 },
+  brand: { fontFamily: F.extrabold, color: "#1D4ED8", letterSpacing: 0.3 },
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -213,13 +310,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
   },
-  chipText: { color: "#1E40AF", fontWeight: "900", fontSize: 12 },
+  chipText: { fontFamily: F.bold, color: "#1E40AF", fontSize: 12 },
 
-  title: { fontSize: 26, fontWeight: "900", color: "#0F172A" },
+  title: { fontFamily: F.extrabold, fontSize: 26, color: "#0F172A" },
   subtitle: {
+    fontFamily: F.semibold,
     color: "#64748B",
     lineHeight: 20,
-    fontWeight: "700",
     marginTop: 2,
   },
 
@@ -232,15 +329,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
-  miniCardAlt: { backgroundColor: "rgba(255,255,255,0.75)" },
-  miniLabel: { color: "#64748B", fontWeight: "800" },
+  miniLabel: { fontFamily: F.semibold, color: "#64748B" },
   miniValue: {
     marginTop: 8,
     fontSize: 22,
-    fontWeight: "900",
+    fontFamily: F.extrabold,
     color: "#0F172A",
   },
-  miniSmall: { marginTop: 8, fontWeight: "800", color: "#0F172A" },
 
   card: {
     backgroundColor: "rgba(255,255,255,0.92)",
@@ -254,11 +349,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 2,
   },
-  cardTitle: { fontSize: 18, fontWeight: "900", color: "#0F172A" },
+  cardTitle: { fontFamily: F.extrabold, fontSize: 18, color: "#0F172A" },
   cardSub: {
     marginTop: 6,
+    fontFamily: F.semibold,
     color: "#64748B",
-    fontWeight: "700",
     lineHeight: 18,
   },
 
@@ -282,7 +377,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  actionText: { flex: 1, fontWeight: "900", color: "#0F172A" },
+  actionText: { flex: 1, fontFamily: F.bold, color: "#0F172A" },
 
   secondaryBtn: {
     marginTop: 12,
@@ -296,17 +391,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  secondaryText: { color: "#0F172A", fontWeight: "900" },
-
-  noteCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.9)",
-    backgroundColor: "rgba(255,255,255,0.75)",
-  },
-  noteText: { flex: 1, color: "#64748B", fontWeight: "800" },
+  secondaryText: { fontFamily: F.bold, color: "#0F172A" },
 });

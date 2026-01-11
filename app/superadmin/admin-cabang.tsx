@@ -1,3 +1,7 @@
+// FILE: app/superadmin/admin-cabang.tsx (atau sesuai route kamu)
+// ✅ FULL — hanya ganti typography ke Inter + konsisten THEME, LOGIKA TETAP SAMA.
+// Catatan: aku tidak ubah alur firestore/auth sama sekali.
+
 import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
@@ -49,6 +53,29 @@ type AdminCabang = {
 function normalizeUsername(u: string) {
   return u.trim().toLowerCase().replace(/\s+/g, "");
 }
+
+const THEME = {
+  bg1: "#BFE9FF",
+  bg2: "#EAF6FF",
+  bg3: "#F7FBFF",
+  text: "#0F172A",
+  sub: "#64748B",
+  border: "#E2E8F0",
+  card: "rgba(255,255,255,0.92)",
+  primary: "#0EA5E9",
+  green: "#16A34A",
+  orange: "#F97316",
+  blue50: "#DBEAFE",
+  blue200: "#BFDBFE",
+};
+
+// ✅ font map (pastikan Inter sudah di-load di Root Layout)
+const F = {
+  regular: "Inter_400Regular",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+  extrabold: "Inter_800ExtraBold",
+};
 
 export default function AdminCabangPage() {
   const insets = useSafeAreaInsets();
@@ -266,7 +293,7 @@ export default function AdminCabangPage() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
-        colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
+        colors={[THEME.bg1, THEME.bg2, THEME.bg3]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -302,7 +329,7 @@ export default function AdminCabangPage() {
               style={styles.input}
             />
             <View style={styles.rightIcon}>
-              <Ionicons name="search-outline" size={18} color="#64748B" />
+              <Ionicons name="search-outline" size={18} color={THEME.sub} />
             </View>
           </View>
 
@@ -351,15 +378,9 @@ export default function AdminCabangPage() {
               </Text>
 
               {loadingCabang ? (
-                <Text
-                  style={{ marginTop: 8, color: "#64748B", fontWeight: "700" }}
-                >
-                  Memuat cabang...
-                </Text>
+                <Text style={styles.loadingText}>Memuat cabang...</Text>
               ) : cabang.length === 0 ? (
-                <Text
-                  style={{ marginTop: 8, color: "#ef4444", fontWeight: "800" }}
-                >
+                <Text style={styles.warnText}>
                   Belum ada cabang. Tambah cabang dulu.
                 </Text>
               ) : (
@@ -379,7 +400,7 @@ export default function AdminCabangPage() {
                         <Text
                           style={[
                             styles.pillText,
-                            active && { color: "#0F172A" },
+                            active && { color: THEME.text },
                           ]}
                         >
                           {c.nama}
@@ -458,7 +479,11 @@ export default function AdminCabangPage() {
                       style={styles.smallBtn}
                       onPress={() => onResetPass(a)}
                     >
-                      <Ionicons name="key-outline" size={18} color="#0F172A" />
+                      <Ionicons
+                        name="key-outline"
+                        size={18}
+                        color={THEME.text}
+                      />
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -508,16 +533,16 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-// ✅ styles kamu biarkan sama
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
+
   header: {
     paddingHorizontal: 4,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { fontWeight: "900", color: "#1D4ED8", letterSpacing: 0.3 },
+  brand: { fontFamily: F.extrabold, color: "#1D4ED8", letterSpacing: 0.3 },
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -526,32 +551,40 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
   },
-  chipText: { color: "#1E40AF", fontWeight: "900", fontSize: 12 },
-  title: { fontSize: 26, fontWeight: "900", color: "#0F172A", marginTop: 10 },
+  chipText: { color: "#1E40AF", fontFamily: F.extrabold, fontSize: 12 },
+
+  title: {
+    fontSize: 26,
+    fontFamily: F.extrabold,
+    color: THEME.text,
+    marginTop: 10,
+  },
   subtitle: {
-    color: "#64748B",
+    color: THEME.sub,
     lineHeight: 20,
-    fontWeight: "700",
+    fontFamily: F.semibold,
     marginTop: 2,
   },
+
   card: {
-    backgroundColor: "rgba(255,255,255,0.92)",
+    backgroundColor: THEME.card,
     borderRadius: 22,
     padding: 16,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
-    shadowColor: "#0F172A",
+    shadowColor: THEME.text,
     shadowOpacity: 0.06,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 2,
   },
-  cardTitle: { fontSize: 16, fontWeight: "900", color: "#0F172A" },
+  cardTitle: { fontSize: 16, fontFamily: F.extrabold, color: THEME.text },
+
   inputWrap: {
     marginTop: 12,
     position: "relative",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: THEME.border,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     paddingLeft: 12,
@@ -559,7 +592,7 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: "center",
   },
-  input: { fontSize: 14, color: "#0F172A", fontWeight: "700" },
+  input: { fontSize: 14, color: THEME.text, fontFamily: F.semibold },
   rightIcon: {
     position: "absolute",
     right: 12,
@@ -568,9 +601,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   primaryBtn: {
     marginTop: 12,
-    backgroundColor: "#0EA5E9",
+    backgroundColor: THEME.primary,
     paddingVertical: 14,
     borderRadius: 18,
     alignItems: "center",
@@ -578,7 +612,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  primaryText: { color: "white", fontWeight: "900", fontSize: 15 },
+  primaryText: { color: "white", fontFamily: F.extrabold, fontSize: 15 },
+
   formBox: {
     marginTop: 14,
     backgroundColor: "rgba(255,255,255,0.7)",
@@ -587,18 +622,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
-  label: { fontWeight: "900", color: "#0F172A" },
+  label: { fontFamily: F.extrabold, color: THEME.text },
+
   inputWrap2: {
     marginTop: 8,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: THEME.border,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     paddingHorizontal: 12,
     height: 48,
     justifyContent: "center",
   },
-  input2: { fontSize: 14, color: "#0F172A", fontWeight: "700" },
+  input2: { fontSize: 14, color: THEME.text, fontFamily: F.semibold },
+
   pillsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   pill: {
     paddingHorizontal: 10,
@@ -606,12 +643,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
   },
-  pillActive: { backgroundColor: "#DBEAFE", borderColor: "#BFDBFE" },
-  pillNormal: { backgroundColor: "#FFFFFF", borderColor: "#E2E8F0" },
-  pillText: { fontWeight: "900", color: "#64748B" },
+  pillActive: { backgroundColor: THEME.blue50, borderColor: THEME.blue200 },
+  pillNormal: { backgroundColor: "#FFFFFF", borderColor: THEME.border },
+  pillText: { fontFamily: F.extrabold, color: THEME.sub },
+
   saveBtn: {
     marginTop: 14,
-    backgroundColor: "#16A34A",
+    backgroundColor: THEME.green,
     paddingVertical: 13,
     borderRadius: 16,
     alignItems: "center",
@@ -619,18 +657,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  saveText: { color: "white", fontWeight: "900" },
+  saveText: { color: "white", fontFamily: F.extrabold },
+
   item: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: THEME.border,
     borderRadius: 18,
     padding: 12,
     flexDirection: "row",
     gap: 10,
   },
-  itemTitle: { fontWeight: "900", color: "#0F172A", fontSize: 15 },
-  itemSub: { marginTop: 4, color: "#64748B", fontWeight: "700" },
+  itemTitle: { fontFamily: F.extrabold, color: THEME.text, fontSize: 15 },
+  itemSub: { marginTop: 4, color: THEME.sub, fontFamily: F.semibold },
+
   pillSmall: {
     alignSelf: "flex-start",
     paddingHorizontal: 10,
@@ -640,7 +680,8 @@ const styles = StyleSheet.create({
   },
   ok: { backgroundColor: "#DCFCE7", borderColor: "#BBF7D0" },
   off: { backgroundColor: "#FEE2E2", borderColor: "#FECACA" },
-  pillSmallText: { fontWeight: "900", fontSize: 12, color: "#0F172A" },
+  pillSmallText: { fontFamily: F.extrabold, fontSize: 12, color: THEME.text },
+
   smallBtn: {
     width: 40,
     height: 40,
@@ -649,13 +690,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  smallOk: { backgroundColor: "#16A34A" },
-  smallWarn: { backgroundColor: "#F97316" },
+  smallOk: { backgroundColor: THEME.green },
+  smallWarn: { backgroundColor: THEME.orange },
+
   note: {
     marginTop: 12,
     textAlign: "center",
     color: "#94A3B8",
-    fontWeight: "700",
+    fontFamily: F.semibold,
     fontSize: 12,
+    lineHeight: 16,
+  },
+
+  loadingText: {
+    marginTop: 8,
+    color: THEME.sub,
+    fontFamily: F.semibold,
+  },
+  warnText: {
+    marginTop: 8,
+    color: "#ef4444",
+    fontFamily: F.extrabold,
   },
 });

@@ -59,6 +59,14 @@ type PaidRow = {
   proofType?: "camera" | "gallery" | "upload" | null;
 };
 
+// 🎨 Font Map (Inter)
+const F = {
+  regular: "Inter_400Regular",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+  extrabold: "Inter_800ExtraBold",
+};
+
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -605,7 +613,7 @@ export default function SiswaByCabangPage() {
 
                 <View style={styles.previewMeta}>
                   <Text style={styles.previewMetaText}>
-                    <Text style={{ fontWeight: "900" }}>
+                    <Text style={{ fontFamily: F.extrabold }}>
                       {selected?.name || "-"}
                     </Text>
                     {"\n"}
@@ -649,7 +657,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { fontWeight: "900", color: "#1D4ED8", letterSpacing: 0.3 },
+  brand: { fontFamily: F.extrabold, color: "#1D4ED8", letterSpacing: 0.3 },
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -658,13 +666,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
   },
-  chipText: { color: "#1E40AF", fontWeight: "900", fontSize: 12 },
+  chipText: { color: "#1E40AF", fontFamily: F.extrabold, fontSize: 12 },
 
-  title: { fontSize: 26, fontWeight: "900", color: "#0F172A", marginTop: 10 },
+  title: {
+    fontSize: 26,
+    fontFamily: F.extrabold,
+    color: "#0F172A",
+    marginTop: 10,
+  },
   subtitle: {
     color: "#64748B",
     lineHeight: 20,
-    fontWeight: "700",
+    fontFamily: F.semibold,
     marginTop: 2,
   },
 
@@ -680,7 +693,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 2,
   },
-  cardTitle: { fontSize: 16, fontWeight: "900", color: "#0F172A" },
+  cardTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
 
   pillsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   pill: {
@@ -691,7 +704,7 @@ const styles = StyleSheet.create({
   },
   pillActive: { backgroundColor: "#DBEAFE", borderColor: "#BFDBFE" },
   pillNormal: { backgroundColor: "#FFFFFF", borderColor: "#E2E8F0" },
-  pillText: { fontWeight: "900", color: "#64748B" },
+  pillText: { fontFamily: F.extrabold, color: "#64748B" },
 
   inputWrap: {
     marginTop: 12,
@@ -705,7 +718,7 @@ const styles = StyleSheet.create({
     height: 48,
     justifyContent: "center",
   },
-  input: { fontSize: 14, color: "#0F172A", fontWeight: "700" },
+  input: { fontSize: 14, color: "#0F172A", fontFamily: F.semibold },
   rightIcon: {
     position: "absolute",
     right: 12,
@@ -725,8 +738,8 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: "center",
   },
-  itemTitle: { fontWeight: "900", color: "#0F172A", fontSize: 15 },
-  itemSub: { marginTop: 4, color: "#64748B", fontWeight: "700" },
+  itemTitle: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 15 },
+  itemSub: { marginTop: 4, color: "#64748B", fontFamily: F.semibold },
 
   rowBetween: {
     flexDirection: "row",
@@ -742,15 +755,15 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
   },
-  badgeText: { fontWeight: "900", fontSize: 12, color: "#0F172A" },
+  badgeText: { fontFamily: F.extrabold, fontSize: 12, color: "#0F172A" },
 
   bigName: {
     marginTop: 10,
-    fontWeight: "900",
+    fontFamily: F.extrabold,
     color: "#0F172A",
     fontSize: 18,
   },
-  meta: { marginTop: 6, color: "#64748B", fontWeight: "800" },
+  meta: { marginTop: 6, color: "#64748B", fontFamily: F.bold },
 
   hr: {
     height: 1,
@@ -766,17 +779,17 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 12,
   },
-  mutasiBulan: { fontWeight: "900", color: "#0F172A" },
-  mutasiTanggal: { fontWeight: "800", color: "#94A3B8" },
+  mutasiBulan: { fontFamily: F.extrabold, color: "#0F172A" },
+  mutasiTanggal: { fontFamily: F.bold, color: "#94A3B8" },
   mutasiRow: {
     marginTop: 8,
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 10,
   },
-  k: { color: "#64748B", fontWeight: "800" },
-  v: { color: "#0F172A", fontWeight: "900" },
-  vStrong: { color: "#0F172A", fontWeight: "900" },
+  k: { color: "#64748B", fontFamily: F.bold },
+  v: { color: "#0F172A", fontFamily: F.extrabold },
+  vStrong: { color: "#0F172A", fontFamily: F.extrabold },
 
   // ✅ tambahan thumbnail (tidak mengubah style lama)
   thumb: {
@@ -797,7 +810,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  proofHint: { color: "#94A3B8", fontWeight: "800" },
+  proofHint: { color: "#94A3B8", fontFamily: F.bold },
 
   backBtn: {
     marginTop: 14,
@@ -811,13 +824,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  backText: { color: "#0F172A", fontWeight: "900" },
+  backText: { color: "#0F172A", fontFamily: F.extrabold },
 
   note: {
     marginTop: 12,
     textAlign: "center",
     color: "#94A3B8",
-    fontWeight: "700",
+    fontFamily: F.semibold,
     fontSize: 12,
   },
 
@@ -838,7 +851,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
-  modalTitle: { fontSize: 16, fontWeight: "900", color: "#0F172A" },
+  modalTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
   xBtn: {
     width: 34,
     height: 34,
@@ -863,5 +876,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     padding: 10,
   },
-  previewMetaText: { color: "#0F172A", fontWeight: "800", lineHeight: 18 },
+  previewMetaText: { color: "#0F172A", fontFamily: F.bold, lineHeight: 18 },
 });
