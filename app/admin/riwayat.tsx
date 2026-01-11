@@ -15,6 +15,13 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
+// ✅ Safe Area + TabBar height (untuk samakan jarak)
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+
 // ✅ DatePicker
 import DateTimePicker from "@react-native-community/datetimepicker";
 
@@ -92,6 +99,9 @@ function monthLabelFromKey(yyyyMM?: string) {
 }
 
 export default function AdminRiwayatTab() {
+  const insets = useSafeAreaInsets();
+  const tabH = useBottomTabBarHeight();
+
   // =========================
   // ✅ PROFIL CABANG ADMIN LOGIN
   // =========================
@@ -362,8 +372,12 @@ export default function AdminRiwayatTab() {
 
   const headerLoading = profileLoading;
 
+  // ✅ SAMAKAN JARAK seperti Siswa/Bayar
+  const topPad = Math.max(insets.top + 8, 18);
+  const bottomPad = tabH + 18;
+
   return (
-    <View style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1 }} edges={[]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
         start={{ x: 0, y: 0 }}
@@ -371,7 +385,14 @@ export default function AdminRiwayatTab() {
         style={StyleSheet.absoluteFill}
       />
 
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: topPad, paddingBottom: bottomPad },
+        ]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.brand}>SPP Mobile</Text>
@@ -543,7 +564,7 @@ export default function AdminRiwayatTab() {
           </Text>
         </View>
 
-        <View style={{ height: 10 }} />
+        <View style={{ height: Platform.OS === "ios" ? 8 : 16 }} />
       </ScrollView>
 
       {/* ✅ MODAL PREVIEW BUKTI */}
@@ -643,7 +664,7 @@ export default function AdminRiwayatTab() {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 

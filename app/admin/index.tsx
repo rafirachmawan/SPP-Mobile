@@ -9,6 +9,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const THEME = {
   bg1: "#BFE9FF",
@@ -23,6 +24,7 @@ const THEME = {
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const stats = [
     { label: "Total Siswa", value: "120", icon: "school-outline" },
@@ -52,6 +54,8 @@ export default function AdminDashboard() {
     },
   ];
 
+  const topPad = Math.max(insets.top + 8, 18); // ✅ biar tidak ketutup status bar/notch
+
   return (
     <View style={{ flex: 1 }}>
       <LinearGradient
@@ -62,7 +66,7 @@ export default function AdminDashboard() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, { paddingTop: topPad }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
@@ -138,7 +142,11 @@ export default function AdminDashboard() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: 18, paddingTop: 18, paddingBottom: 26 },
+  scroll: {
+    paddingHorizontal: 18,
+    paddingTop: 18, // ✅ default tetap ada, tapi akan dioverride oleh insets di atas
+    paddingBottom: 26,
+  },
 
   headerRow: {
     flexDirection: "row",

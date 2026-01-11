@@ -16,6 +16,9 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 
+// ✅ Safe Area (biar tidak ketutup status bar / notch)
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 // ✅ Image Picker (Expo)
 import * as ImagePicker from "expo-image-picker";
 
@@ -137,6 +140,77 @@ function nextMonthLabel(d: Date) {
   return monthLabelOf(nd);
 }
 
+// ✅ untuk spreadsheet
+function formatTanggalOnly(d: Date) {
+  return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+}
+function formatJamOnly(d: Date) {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/**
+ * ✅ Push pembayaran ke Google Sheet via Apps Script WebApp
+ * - Pakai res.text() dulu biar error kebaca
+ * - Log status + raw response
+ * - Kirim branchId juga (biar aman jika script validasi)
+ */
+async function pushPaymentToSheet(payload: {
+  branchId: string;
+  branchName: string;
+  invoiceNo: string;
+
+  tanggal: string;
+  jam: string;
+
+  studentName: string;
+  jenisPembayaran: string; // contoh: "SPP Januari 2026"
+  metode: "Cash" | "Transfer";
+
+  nominal: number;
+  voucherDipakai: number;
+  voucherDidapat: number;
+
+  // optional (kalau script kamu dukung)
+  monthKey?: string;
+  createdAtIso?: string;
+}) {
+  // ✅ PAKAI URL DEPLOY WEB APP (script.google.com/macros/s/.../exec)
+  // GANTI dengan URL deploy kamu yang resmi
+  const WEBAPP_URL =
+    "https://script.google.com/macros/s/AKfycbxSDNL665Co4ybElVFG3KSu8f8UBMDwTGCtI9Tw_IUNDef_pUczNBDWZu8d0ESl4el_og/exec";
+
+  try {
+    const res = await fetch(WEBAPP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const raw = await res.text();
+    console.log("push sheet status:", res.status);
+    console.log("push sheet raw:", raw);
+
+    let data: any = null;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = null;
+    }
+
+    // ✅ jangan ganggu user (cukup log saja)
+    if (!res.ok || !data?.ok) {
+      console.log("push sheet gagal:", data || raw);
+      return false;
+    }
+
+    console.log("push sheet sukses:", data);
+    return true;
+  } catch (err) {
+    console.log("push sheet error:", err);
+    return false;
+  }
+}
+
 // random sesuai peluang (weight)
 function pickByWeight(items: Hadiah[]) {
   const clean = items
@@ -188,6 +262,8 @@ async function makeProofDataUrl(
 }
 
 export default function BayarSPP() {
+  const insets = useSafeAreaInsets(); // ✅ penting biar konten turun
+
   const today = new Date();
   const day = today.getDate();
 
@@ -453,7 +529,6 @@ export default function BayarSPP() {
         compress: 0.5,
       });
 
-      // Safety: kalau kebesaran, kasih info (tetap disimpan, tapi user tau)
       if (made.bytesApprox > 850_000) {
         Alert.alert(
           "Peringatan",
@@ -661,7 +736,6 @@ export default function BayarSPP() {
         return;
       }
 
-      // ✅ kalau Transfer, wajib ada bukti (local atau sudah ada di invoiceDraft)
       const hasProof = !!proofLocal?.dataUrl || !!invoiceDraft.proofDataUrl;
 
       if (invoiceDraft.metode === "Transfer" && !hasProof) {
@@ -674,7 +748,6 @@ export default function BayarSPP() {
 
       const invNo = invoiceDraft.invoiceNo;
 
-      // ambil bukti dari local (lebih prioritas), kalau tidak ada pakai existing
       const proofDataUrl =
         proofLocal?.dataUrl || invoiceDraft.proofDataUrl || null;
       const proofMime = proofLocal?.mime || invoiceDraft.proofMime || null;
@@ -705,7 +778,6 @@ export default function BayarSPP() {
           createdAt: serverTimestamp(),
         };
 
-        // ✅ simpan bukti base64 ke Firestore (tanpa Storage)
         if (proofDataUrl) {
           payload.proofDataUrl = proofDataUrl;
           payload.proofMime = proofMime || "image/jpeg";
@@ -730,11 +802,32 @@ export default function BayarSPP() {
           : p
       );
 
+      // ✅ push ke spreadsheet setelah bayar sukses
+      try {
+        const now = new Date();
+        await pushPaymentToSheet({
+          branchId,
+          branchName,
+          invoiceNo: invNo,
+          tanggal: formatTanggalOnly(now),
+          jam: formatJamOnly(now),
+          studentName: invoiceDraft.studentName,
+          jenisPembayaran: `SPP ${invoiceDraft.monthLabel}`,
+          metode: invoiceDraft.metode,
+          nominal: invoiceDraft.total,
+          voucherDipakai: invoiceDraft.potongan,
+          voucherDidapat: 0,
+          monthKey: invoiceDraft.monthKey,
+          createdAtIso: now.toISOString(),
+        });
+      } catch (e) {
+        console.log("push sheet (pay) error:", e);
+      }
+
       Alert.alert("✅ Lunas", "Pembayaran berhasil disimpan.");
     } catch (e: any) {
       console.log(e);
 
-      // kalau error karena ukuran dokumen (base64 terlalu besar)
       const msg = String(e?.message || "");
       if (
         msg.toLowerCase().includes("maximum") ||
@@ -826,6 +919,28 @@ export default function BayarSPP() {
         }) untuk ${nextMonthLabel(now)}`
       );
 
+      // ✅ update baris sheet (upsert by invoiceNo)
+      try {
+        const now2 = new Date();
+        await pushPaymentToSheet({
+          branchId,
+          branchName,
+          invoiceNo: invoiceDraft.invoiceNo,
+          tanggal: formatTanggalOnly(now2),
+          jam: formatJamOnly(now2),
+          studentName: invoiceDraft.studentName,
+          jenisPembayaran: `SPP ${invoiceDraft.monthLabel}`,
+          metode: invoiceDraft.metode,
+          nominal: invoiceDraft.total,
+          voucherDipakai: invoiceDraft.potongan,
+          voucherDidapat: Math.max(Number(picked.nominal || 0), 0),
+          monthKey: invoiceDraft.monthKey,
+          createdAtIso: now2.toISOString(),
+        });
+      } catch (e) {
+        console.log("push sheet (spin) error:", e);
+      }
+
       Alert.alert(
         "🎁 Hasil Spin",
         `${selected.name}\nHadiah: ${
@@ -840,6 +955,10 @@ export default function BayarSPP() {
     }
   }
 
+  // ✅ padding aman atas & bawah (tanpa ubah logika)
+  const topPad = Math.max(insets.top + 8, 18);
+  const bottomPad = Math.max(insets.bottom + 18, 28);
+
   return (
     <View style={{ flex: 1 }}>
       <LinearGradient
@@ -848,8 +967,12 @@ export default function BayarSPP() {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: topPad, paddingBottom: bottomPad },
+        ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <Text style={styles.brand}>Shining Sun 🎈</Text>
         <Text style={styles.title}>Bayar SPP</Text>
@@ -1581,7 +1704,6 @@ const styles = StyleSheet.create({
   },
   methodText: { fontWeight: "900", color: THEME.sub },
 
-  // ✅ proof UI
   proofBox: {
     marginTop: 8,
     borderWidth: 1,

@@ -1,3 +1,4 @@
+// FILE: app/superadmin/siswa.tsx
 import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
@@ -8,6 +9,9 @@ import {
   TextInput,
   Platform,
   Alert,
+  ActivityIndicator,
+  Modal,
+  Image,
 } from "react-native";
 import {
   SafeAreaView,
@@ -25,6 +29,8 @@ import {
   orderBy,
   query,
   where,
+  limit,
+  Timestamp,
 } from "firebase/firestore";
 
 type Cabang = { id: string; nama: string };
@@ -39,14 +45,29 @@ type Student = {
 };
 
 type PaidRow = {
+  id: string;
   bulan: string;
   tanggal: string;
+  jam: string;
   nominal: number;
   potongan: number;
   dibayar: number;
-  status: "Lunas";
+  metode: "Cash" | "Transfer";
+
+  // ✅ bukti bayar (ikuti yang dipakai Bayar SPP)
+  proofDataUrl?: string | null;
+  proofType?: "camera" | "gallery" | "upload" | null;
 };
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+function formatTanggal(d: Date) {
+  return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+}
+function formatJam(d: Date) {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
 function bulanIndo(date: Date) {
   const bulan = [
     "Januari",
@@ -64,24 +85,14 @@ function bulanIndo(date: Date) {
   ];
   return `${bulan[date.getMonth()]} ${date.getFullYear()}`;
 }
-
-function genHistoryDummy(spp: number) {
-  const now = new Date();
-  const rows: PaidRow[] = [];
-  for (let i = 7; i >= 1; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const pot = i % 3 === 0 ? 10000 : 0;
-    const pay = Math.max(spp - pot, 0);
-    rows.push({
-      bulan: bulanIndo(d),
-      tanggal: `0${(i % 9) + 1}-0${((i + 2) % 9) + 1}-${d.getFullYear()}`,
-      nominal: spp,
-      potongan: pot,
-      dibayar: pay,
-      status: "Lunas",
-    });
-  }
-  return rows.reverse();
+function monthLabelFromMonthKey(monthKey: string) {
+  // monthKey: YYYY-MM
+  const [yStr, mStr] = String(monthKey || "").split("-");
+  const y = Number(yStr);
+  const m = Number(mStr);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12)
+    return monthKey || "-";
+  return bulanIndo(new Date(y, m - 1, 1));
 }
 
 export default function SiswaByCabangPage() {
@@ -96,9 +107,27 @@ export default function SiswaByCabangPage() {
   const [siswaAll, setSiswaAll] = useState<Student[]>([]);
   const [loadingSiswa, setLoadingSiswa] = useState(true);
 
+  // ====== MUTASI dari Firestore (payments) ======
+  const [history, setHistory] = useState<PaidRow[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   const [cabang, setCabang] = useState<string>("Semua"); // "Semua" atau cabangId
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Student | null>(null);
+
+  // ✅ modal preview bukti
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewItem, setPreviewItem] = useState<PaidRow | null>(null);
+
+  function openPreview(item: PaidRow) {
+    if (!item.proofDataUrl) return;
+    setPreviewItem(item);
+    setPreviewOpen(true);
+  }
+  function closePreview() {
+    setPreviewOpen(false);
+    setPreviewItem(null);
+  }
 
   // ===================== LOAD CABANG (branches) =====================
   useEffect(() => {
@@ -110,7 +139,10 @@ export default function SiswaByCabangPage() {
       (snap) => {
         const rows: Cabang[] = snap.docs.map((d) => {
           const data = d.data() as any;
-          return { id: d.id, nama: String(data.name || "").trim() };
+          return {
+            id: d.id,
+            nama: String(data.name || data.branchName || "").trim(),
+          };
         });
         setCabangRows(rows);
         setLoadingCabang(false);
@@ -174,6 +206,13 @@ export default function SiswaByCabangPage() {
 
         setSiswaAll(fixed);
         setLoadingSiswa(false);
+
+        // amankan selected kalau data berubah
+        setSelected((prev) => {
+          if (!prev) return prev;
+          const found = fixed.find((x) => x.id === prev.id);
+          return found || null;
+        });
       },
       (err) => {
         console.log(err);
@@ -199,10 +238,95 @@ export default function SiswaByCabangPage() {
     return base.filter((x) => x.name.toLowerCase().includes(qq));
   }, [siswaAll, cabang, q]);
 
-  const history = useMemo(
-    () => (selected ? genHistoryDummy(selected.spp) : []),
-    [selected]
-  );
+  // ===================== LOAD MUTASI (payments) saat pilih siswa =====================
+  useEffect(() => {
+    setHistory([]);
+    if (!selected?.id) return;
+
+    setLoadingHistory(true);
+
+    // ✅ Superadmin tidak dibatasi cabang login; tapi tetap pakai filter cabang sesuai pilihan pill
+    // - kalau pill "Semua": ambil payments by studentId saja
+    // - kalau pilih cabang tertentu: tambahkan where branchId/cabangId
+    //
+    // NOTE: query dengan studentId + orderBy(paidAt) butuh index.
+    // Kita tangkap error index tanpa popup.
+    const baseCol = collection(db, "payments");
+
+    const qPay =
+      cabang === "Semua"
+        ? query(
+            baseCol,
+            where("studentId", "==", selected.id),
+            orderBy("paidAt", "desc"),
+            limit(60)
+          )
+        : query(
+            baseCol,
+            where("studentId", "==", selected.id),
+            where("branchId", "==", cabang),
+            orderBy("paidAt", "desc"),
+            limit(60)
+          );
+
+    const unsub = onSnapshot(
+      qPay,
+      (snap) => {
+        const rows: PaidRow[] = snap.docs.map((d) => {
+          const data = d.data() as any;
+
+          const paidAt: Date | null = data?.paidAt?.toDate
+            ? data.paidAt.toDate()
+            : data?.paidAt instanceof Timestamp
+            ? data.paidAt.toDate()
+            : null;
+
+          const monthKey = String(data.monthKey || "");
+          const bulan =
+            String(data.monthLabel || "").trim() ||
+            (monthKey
+              ? monthLabelFromMonthKey(monthKey)
+              : paidAt
+              ? bulanIndo(paidAt)
+              : "-");
+
+          const nominal = Number(data.nominal || 0) || 0;
+          const potongan = Number(data.potongan || 0) || 0;
+          const total =
+            Number(data.total || 0) || Math.max(nominal - potongan, 0);
+
+          const metode: "Cash" | "Transfer" =
+            String(data.metode || "Cash") === "Transfer" ? "Transfer" : "Cash";
+
+          return {
+            id: d.id,
+            bulan,
+            tanggal: paidAt ? formatTanggal(paidAt) : "-",
+            jam: paidAt ? formatJam(paidAt) : "-",
+            nominal,
+            potongan,
+            dibayar: total,
+            metode,
+
+            // ✅ FIX image: pakai proofDataUrl (bukan proofUrl)
+            proofDataUrl: data.proofDataUrl || null,
+            proofType: (data.proofType as any) || null,
+          };
+        });
+
+        setHistory(rows);
+        setLoadingHistory(false);
+      },
+      (err: any) => {
+        console.log("mutasi superadmin error:", err?.code, err?.message);
+        setLoadingHistory(false);
+        // ✅ jangan Alert biar gak ganggu (index warning)
+      }
+    );
+
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, cabang]);
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
@@ -252,6 +376,7 @@ export default function SiswaByCabangPage() {
                     onPress={() => {
                       setCabang(c.id);
                       setSelected(null);
+                      setHistory([]);
                     }}
                     style={[
                       styles.pill,
@@ -321,7 +446,7 @@ export default function SiswaByCabangPage() {
             </View>
 
             <Text style={styles.note}>
-              Klik siswa untuk lihat mutasi pembayaran (dummy).
+              Klik siswa untuk lihat mutasi pembayaran (realtime).
             </Text>
           </View>
         ) : (
@@ -341,51 +466,160 @@ export default function SiswaByCabangPage() {
 
             <View style={styles.hr} />
 
-            <View style={{ gap: 10 }}>
-              {history.map((m, idx) => (
-                <View key={idx} style={styles.mutasiItem}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.mutasiBulan}>{m.bulan}</Text>
-                    <Text style={styles.mutasiTanggal}>{m.tanggal}</Text>
-                  </View>
+            {loadingHistory ? (
+              <View style={{ paddingVertical: 10, alignItems: "center" }}>
+                <ActivityIndicator />
+                <Text style={[styles.note, { marginTop: 10 }]}>
+                  Memuat mutasi...
+                </Text>
+              </View>
+            ) : history.length === 0 ? (
+              <Text style={[styles.note, { marginTop: 4 }]}>
+                Belum ada pembayaran tersimpan untuk siswa ini.
+              </Text>
+            ) : (
+              <View style={{ gap: 10 }}>
+                {history.map((m) => {
+                  const hasProof = !!m.proofDataUrl;
+                  return (
+                    <TouchableOpacity
+                      key={m.id}
+                      activeOpacity={0.9}
+                      onPress={() => (hasProof ? openPreview(m) : null)}
+                      style={styles.mutasiItem}
+                    >
+                      <View style={styles.rowBetween}>
+                        <Text style={styles.mutasiBulan}>{m.bulan}</Text>
+                        <Text style={styles.mutasiTanggal}>
+                          {m.tanggal}
+                          {m.jam !== "-" ? ` • ${m.jam}` : ""}
+                        </Text>
+                      </View>
 
-                  <View style={styles.mutasiRow}>
-                    <Text style={styles.k}>Nominal</Text>
-                    <Text style={styles.v}>
-                      Rp {m.nominal.toLocaleString("id-ID")}
-                    </Text>
-                  </View>
-                  <View style={styles.mutasiRow}>
-                    <Text style={styles.k}>Potongan Spin</Text>
-                    <Text style={styles.v}>
-                      Rp {m.potongan.toLocaleString("id-ID")}
-                    </Text>
-                  </View>
-                  <View style={styles.mutasiRow}>
-                    <Text style={styles.k}>Dibayar</Text>
-                    <Text style={styles.vStrong}>
-                      Rp {m.dibayar.toLocaleString("id-ID")}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </View>
+                      <View style={styles.mutasiRow}>
+                        <Text style={styles.k}>Nominal</Text>
+                        <Text style={styles.v}>
+                          Rp {m.nominal.toLocaleString("id-ID")}
+                        </Text>
+                      </View>
+                      <View style={styles.mutasiRow}>
+                        <Text style={styles.k}>Potongan Spin</Text>
+                        <Text style={styles.v}>
+                          Rp {m.potongan.toLocaleString("id-ID")}
+                        </Text>
+                      </View>
+                      <View style={styles.mutasiRow}>
+                        <Text style={styles.k}>Dibayar</Text>
+                        <Text style={styles.vStrong}>
+                          Rp {m.dibayar.toLocaleString("id-ID")}
+                        </Text>
+                      </View>
+                      <View style={styles.mutasiRow}>
+                        <Text style={styles.k}>Metode</Text>
+                        <Text style={styles.v}>{m.metode}</Text>
+                      </View>
+
+                      <View
+                        style={{
+                          marginTop: 10,
+                          flexDirection: "row",
+                          gap: 10,
+                          alignItems: "center",
+                        }}
+                      >
+                        {hasProof ? (
+                          <>
+                            <Image
+                              source={{ uri: m.proofDataUrl as string }}
+                              style={styles.thumb}
+                            />
+                            <Text style={styles.proofHint}>
+                              Tap untuk lihat bukti
+                            </Text>
+                          </>
+                        ) : (
+                          <View style={styles.thumbEmpty}>
+                            <Ionicons
+                              name="image-outline"
+                              size={18}
+                              color="#94A3B8"
+                            />
+                          </View>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
 
             <TouchableOpacity
               activeOpacity={0.9}
               style={styles.backBtn}
-              onPress={() => setSelected(null)}
+              onPress={() => {
+                setSelected(null);
+                setHistory([]);
+              }}
             >
               <Ionicons name="arrow-back" size={18} color="#0F172A" />
               <Text style={styles.backText}>Kembali</Text>
             </TouchableOpacity>
 
-            <Text style={styles.note}>* Data mutasi masih dummy.</Text>
+            <Text style={styles.note}>
+              * Data mutasi diambil realtime dari koleksi payments.
+            </Text>
           </View>
         )}
 
         <View style={{ height: Platform.OS === "ios" ? 8 : 16 }} />
       </ScrollView>
+
+      {/* ✅ MODAL PREVIEW BUKTI */}
+      <Modal
+        visible={previewOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closePreview}
+      >
+        <View style={styles.previewBackdrop}>
+          <View style={styles.previewCard}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.modalTitle}>Bukti Pembayaran</Text>
+              <TouchableOpacity onPress={closePreview} style={styles.xBtn}>
+                <Ionicons name="close" size={18} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+
+            {!previewItem?.proofDataUrl ? (
+              <Text style={[styles.note, { marginTop: 12 }]}>
+                Tidak ada bukti.
+              </Text>
+            ) : (
+              <>
+                <View style={{ marginTop: 12 }}>
+                  <Image
+                    source={{ uri: previewItem.proofDataUrl }}
+                    style={styles.previewImg}
+                  />
+                </View>
+
+                <View style={styles.previewMeta}>
+                  <Text style={styles.previewMetaText}>
+                    <Text style={{ fontWeight: "900" }}>
+                      {selected?.name || "-"}
+                    </Text>
+                    {"\n"}
+                    {previewItem.bulan} • {previewItem.metode}
+                    {"\n"}
+                    {previewItem.tanggal}
+                    {previewItem.jam !== "-" ? ` • ${previewItem.jam}` : ""}
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -405,7 +639,7 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-// ✅ styles kamu biarkan sama persis
+// ✅ styles kamu biarkan sama persis + tambah style thumb/preview (tidak mengubah yang lain)
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
 
@@ -544,6 +778,27 @@ const styles = StyleSheet.create({
   v: { color: "#0F172A", fontWeight: "900" },
   vStrong: { color: "#0F172A", fontWeight: "900" },
 
+  // ✅ tambahan thumbnail (tidak mengubah style lama)
+  thumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F1F5F9",
+  },
+  thumbEmpty: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  proofHint: { color: "#94A3B8", fontWeight: "800" },
+
   backBtn: {
     marginTop: 14,
     backgroundColor: "rgba(255,255,255,0.95)",
@@ -565,4 +820,48 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 12,
   },
+
+  // ✅ preview modal
+  previewBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(2,6,23,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+  previewCard: {
+    width: "100%",
+    maxWidth: 430,
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+  },
+  modalTitle: { fontSize: 16, fontWeight: "900", color: "#0F172A" },
+  xBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "rgba(226,232,240,0.8)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewImg: {
+    width: "100%",
+    height: 360,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F1F5F9",
+  },
+  previewMeta: {
+    marginTop: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+    padding: 10,
+  },
+  previewMetaText: { color: "#0F172A", fontWeight: "800", lineHeight: 18 },
 });

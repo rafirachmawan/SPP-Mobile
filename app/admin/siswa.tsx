@@ -303,7 +303,7 @@ export default function TabSiswa() {
             dibayar: total,
             metode: (data.metode as "Cash" | "Transfer") || "Cash",
 
-            // ✅ FIX: field bukti sama dengan Bayar SPP (proofDataUrl), bukan proofUrl
+            // ✅ FIX: field bukti sama dengan Bayar SPP (proofDataUrl)
             proofDataUrl: data.proofDataUrl || null,
             proofType: (data.proofType as any) || null,
           };
@@ -328,8 +328,14 @@ export default function TabSiswa() {
     return siswa.filter((x) => x.name.toLowerCase().includes(qq));
   }, [q, siswa]);
 
+  // ✅ SAMAKAN JARAK seperti Bayar SPP:
+  // - topPad: aman dari notch/status bar + tetap konsisten
+  // - bottomPad: aman dari tabbar (pakai tabH saja biar gak double)
+  const topPad = Math.max(insets.top + 8, 18);
+  const bottomPad = tabH + 18;
+
   return (
-    <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
+    <SafeAreaView style={{ flex: 1 }} edges={[]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
         start={{ x: 0, y: 0 }}
@@ -341,8 +347,8 @@ export default function TabSiswa() {
         contentContainerStyle={[
           styles.scroll,
           {
-            paddingTop: Math.max(insets.top, 14),
-            paddingBottom: tabH + insets.bottom + 18,
+            paddingTop: topPad,
+            paddingBottom: bottomPad,
           },
         ]}
         keyboardShouldPersistTaps="handled"
