@@ -78,6 +78,9 @@ type InvoiceDraft = {
   potongan: number; // total potongan dari kupon (bulan-bulan yang dibayar)
   total: number;
 
+  // ✅ detail potongan per bulan
+  potonganByMonth: Record<string, number>;
+
   metode: "Cash" | "Transfer";
 
   status: "UNPAID" | "PAID";
@@ -86,7 +89,7 @@ type InvoiceDraft = {
 
   proofDataUrl?: string | null;
   proofMime?: string | null;
-  proofType?: "camera" | "gallery" | null;
+  proofType?: "camera" | "gallery" | "upload" | null;
 };
 
 type ProofLocal = {
@@ -140,14 +143,6 @@ function formatJamOnly(d: Date) {
 // ✅ helper invoiceNo (konsisten)
 function invoiceNoOf(branchId: string, monthKey: string, studentId: string) {
   return `INV-${branchId}-${monthKey}-${studentId}`;
-}
-
-function addOneMonthKey(monthKey: string) {
-  const [yStr, mStr] = monthKey.split("-");
-  const y = Number(yStr);
-  const m = Number(mStr); // 1..12
-  const d = new Date(y, m - 1 + 1, 1); // +1 bulan
-  return monthKeyOf(d);
 }
 
 /**
@@ -461,7 +456,6 @@ export default function BayarSPP() {
 
   // ===================== BULAN OPSI (JAN - DES) =====================
   const monthOptions = useMemo(() => {
-    // ✅ selalu 1 tahun penuh (Jan–Dec) supaya tidak berhenti di Juni
     return Array.from({ length: 12 }).map((_, i) => {
       const d = new Date(year, i, 1);
       return { key: monthKeyOf(d), label: monthLabelOf(d) };
@@ -480,18 +474,6 @@ export default function BayarSPP() {
   const [proofLocal, setProofLocal] = useState<ProofLocal | null>(null);
   const [processingProof, setProcessingProof] = useState(false);
 
-  // ✅ spin state (legacy text)
-  const [spinBonusLoading, setSpinBonusLoading] = useState(false);
-  const [spinBonusText, setSpinBonusText] = useState("");
-  const [spinDoneKeys, setSpinDoneKeys] = useState<string[]>([]);
-
-  // ✅ PRE-SPIN (baru): 1x sebelum bayar untuk bulan depan
-  const [preSpinLoading, setPreSpinLoading] = useState(false);
-  const [preSpinDone, setPreSpinDone] = useState(false);
-  const [preSpinMonthKey, setPreSpinMonthKey] = useState<string | null>(null);
-  const [preSpinMonthLabel, setPreSpinMonthLabel] = useState<string>("");
-  const [preSpinNominal, setPreSpinNominal] = useState<number>(0);
-
   // ✅ status bulan terbayar
   const [paidMonths, setPaidMonths] = useState<
     Record<string, { paid: boolean; paidAtText?: string }>
@@ -502,18 +484,36 @@ export default function BayarSPP() {
 
   const showLoading = profileLoading || studentLoading;
 
-  // ✅ target kupon BARU: hanya 1x untuk bulan setelah bulan terakhir yang dipilih
-  const spinNextMonthKey = useMemo(() => {
-    if (!invoiceDraft?.monthKeys?.length) return null;
-    const last = invoiceDraft.monthKeys[invoiceDraft.monthKeys.length - 1];
-    return addOneMonthKey(last);
-  }, [invoiceDraft?.monthKeys]);
+  // ===================== MULTI SPIN (STEP-BY-STEP) =====================
+  const [multiSpinLoading, setMultiSpinLoading] = useState(false);
 
-  const spinNextMonthLabel = useMemo(() => {
-    if (!spinNextMonthKey) return "";
-    const found = monthOptions.find((m) => m.key === spinNextMonthKey);
-    return found?.label || spinNextMonthKey;
-  }, [spinNextMonthKey, monthOptions]);
+  // doneMap: monthKey -> nominal
+  const [multiSpinDoneMap, setMultiSpinDoneMap] = useState<
+    Record<string, number | null>
+  >({});
+  const [lastSpinAwardTotal, setLastSpinAwardTotal] = useState(0);
+
+  function monthIndexOfKey(mk: string) {
+    const order = monthOptions.map((m) => m.key);
+    return order.indexOf(mk);
+  }
+
+  /**
+   * ✅ FIX: Eligible spin = semua bulan yang dipilih KECUALI bulan pertama (paling awal) di selection.
+   * Contoh: Jan+Feb+Mar => eligible: Feb, Mar (2x spin)
+   */
+  function getEligibleSpinMonths(selectedKeys: string[]) {
+    const order = monthOptions.map((m) => m.key);
+    const uniq = Array.from(new Set(selectedKeys)).filter((mk) =>
+      order.includes(mk)
+    );
+
+    uniq.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    if (uniq.length <= 1) return [];
+
+    // buang bulan pertama (bulan yang sedang dibayar “awal”)
+    return uniq.slice(1);
+  }
 
   async function ensurePerms() {
     const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -631,7 +631,8 @@ export default function BayarSPP() {
   // ===================== BUILD DRAFT =====================
   async function buildDraftForMonths(
     s: Student,
-    months: { key: string; label: string }[]
+    months: { key: string; label: string }[],
+    keepPaymentGroupId?: string
   ) {
     const now = new Date();
     const monthKeys = months.map((m) => m.key);
@@ -639,27 +640,35 @@ export default function BayarSPP() {
 
     const nominalTotal = Number(s.spp || 0) * monthKeys.length;
 
-    // sum diskon untuk bulan yang dibayar
+    // ✅ potongan per bulan + total
     let potonganTotal = 0;
+    const potonganByMonth: Record<string, number> = {};
     try {
       const snaps = await Promise.all(
         monthKeys.map((mk) =>
           getDoc(doc(db, "student_discounts", `${s.id}_${mk}`))
         )
       );
-      potonganTotal = snaps.reduce((acc, snap) => {
-        if (!snap.exists()) return acc;
-        const v = Math.max(Number((snap.data() as any)?.nominal || 0), 0);
-        return acc + v;
-      }, 0);
+
+      snaps.forEach((snap, idx) => {
+        const mk = monthKeys[idx];
+        const v = snap.exists()
+          ? Math.max(Number((snap.data() as any)?.nominal || 0), 0)
+          : 0;
+        potonganByMonth[mk] = v;
+        potonganTotal += v;
+      });
     } catch (e) {
       console.log("load discounts error:", e);
       potonganTotal = 0;
+      monthKeys.forEach((mk) => (potonganByMonth[mk] = 0));
     }
 
     const total = Math.max(nominalTotal - potonganTotal, 0);
 
-    const paymentGroupId = `PAY-${branchId}-${Date.now()}-${s.id}`;
+    // ✅ FIX: paymentGroupId jangan berubah saat rebuild (biar konsisten)
+    const paymentGroupId =
+      keepPaymentGroupId || `PAY-${branchId}-${Date.now()}-${s.id}`;
 
     const draft: InvoiceDraft = {
       paymentGroupId,
@@ -673,6 +682,7 @@ export default function BayarSPP() {
       nominal: nominalTotal,
       potongan: potonganTotal,
       total,
+      potonganByMonth,
       metode: "Cash",
       status: "UNPAID",
       createdAtLocal: now,
@@ -727,7 +737,6 @@ export default function BayarSPP() {
       const k = order[i];
       if (!paidMap?.[k]?.paid) return k;
     }
-    // kalau semua sudah paid, fallback: bulan ini
     return currentMonthKey;
   }
 
@@ -742,23 +751,18 @@ export default function BayarSPP() {
     setInvoiceOpen(true);
     setInvoiceLoading(true);
     setInvoiceDraft(null);
-    setSpinBonusText("");
-    setSpinDoneKeys([]);
     setProofLocal(null);
     setPaidMonths({});
     setMonthPickerOpen(false);
 
-    // ✅ reset pre-spin
-    setPreSpinLoading(false);
-    setPreSpinDone(false);
-    setPreSpinMonthKey(null);
-    setPreSpinMonthLabel("");
-    setPreSpinNominal(0);
+    // ✅ reset multi spin state
+    setMultiSpinLoading(false);
+    setMultiSpinDoneMap({});
+    setLastSpinAwardTotal(0);
 
     try {
       const paidMap = (await loadPaidMonthsForStudent(s)) || {};
 
-      // ✅ default 1 bulan saja (biar tidak “keikut 2 bulan” seperti kasus Mei jadi 400)
       const defKey = pickDefaultMonthKey(paidMap);
       const defOpt =
         monthOptions.find((m) => m.key === defKey) || monthOptions[0];
@@ -780,18 +784,13 @@ export default function BayarSPP() {
     setInvoiceOpen(false);
     setInvoiceDraft(null);
     setSelected(null);
-    setSpinBonusText("");
-    setSpinDoneKeys([]);
     setProofLocal(null);
     setPaidMonths({});
     setMonthPickerOpen(false);
 
-    // ✅ reset pre-spin
-    setPreSpinLoading(false);
-    setPreSpinDone(false);
-    setPreSpinMonthKey(null);
-    setPreSpinMonthLabel("");
-    setPreSpinNominal(0);
+    setMultiSpinLoading(false);
+    setMultiSpinDoneMap({});
+    setLastSpinAwardTotal(0);
   }
 
   // ✅ toggle select bulan (dipakai di dropdown list)
@@ -799,7 +798,6 @@ export default function BayarSPP() {
     if (!selected || !invoiceDraft) return;
     if (invoiceDraft.status === "PAID") return;
 
-    // ✅ kalau bulan ini sudah terbayar, jangan dipilih
     if (paidMonths?.[key]?.paid) {
       const label = monthOptions.find((m) => m.key === key)?.label || key;
       Alert.alert("Sudah Terbayar", `${label} sudah terbayar.`);
@@ -810,11 +808,8 @@ export default function BayarSPP() {
     let nextKeys = exists
       ? invoiceDraft.monthKeys.filter((k) => k !== key)
       : [...invoiceDraft.monthKeys, key];
-
-    // minimal 1 bulan harus dipilih
     if (nextKeys.length === 0) nextKeys = [key];
 
-    // sort sesuai urutan Jan–Dec
     const order = monthOptions.map((m) => m.key);
     nextKeys.sort((a, b) => order.indexOf(a) - order.indexOf(b));
 
@@ -825,7 +820,12 @@ export default function BayarSPP() {
 
     setInvoiceLoading(true);
     try {
-      const rebuilt = await buildDraftForMonths(selected, nextMonths);
+      // ✅ keep paymentGroupId saat rebuild
+      const rebuilt = await buildDraftForMonths(
+        selected,
+        nextMonths,
+        invoiceDraft.paymentGroupId
+      );
       setInvoiceDraft((p) =>
         p
           ? {
@@ -837,22 +837,18 @@ export default function BayarSPP() {
             }
           : rebuilt
       );
-      setSpinBonusText("");
-      setSpinDoneKeys([]);
 
-      // ✅ jika bulan berubah, pre-spin reset (biar tidak nyasar)
-      setPreSpinLoading(false);
-      setPreSpinDone(false);
-      setPreSpinMonthKey(null);
-      setPreSpinMonthLabel("");
-      setPreSpinNominal(0);
+      // ✅ reset multi spin ketika pilihan bulan berubah (biar tidak nyasar)
+      setMultiSpinLoading(false);
+      setMultiSpinDoneMap({});
+      setLastSpinAwardTotal(0);
     } finally {
       setInvoiceLoading(false);
     }
   }
 
-  // ===================== SPIN PRE-PAY (BARU) =====================
-  async function spinBeforePayOnce() {
+  // ===================== SPIN STEP-BY-STEP (FIX: auto hitung pending tanpa queue/cursor) =====================
+  async function spinNext() {
     if (!selected || !invoiceDraft) return;
 
     if (spinLoading) {
@@ -860,7 +856,6 @@ export default function BayarSPP() {
       return;
     }
 
-    // ✅ hanya sebelum tanggal
     if (!canSpinToday) {
       Alert.alert(
         "Spin Ditutup",
@@ -869,56 +864,64 @@ export default function BayarSPP() {
       return;
     }
 
-    // ✅ hanya saat belum bayar
     if (invoiceDraft.status === "PAID") {
-      Alert.alert("Sudah Lunas", "Spin pre-pay hanya bisa sebelum pembayaran.");
+      Alert.alert("Sudah Lunas", "Spin hanya bisa sebelum pembayaran.");
       return;
     }
 
-    // ✅ hanya 1x
-    if (preSpinDone) return;
+    const eligible = getEligibleSpinMonths(invoiceDraft.monthKeys);
+    const pending = eligible.filter((mk) => multiSpinDoneMap[mk] == null);
 
-    const nextMk = spinNextMonthKey;
-    if (!nextMk) {
-      Alert.alert(
-        "Pilih Bulan",
-        "Pilih minimal 1 bulan yang mau dibayar dulu."
-      );
+    const currentMk = pending[0];
+    if (!currentMk) {
+      Alert.alert("Selesai", "Semua bulan yang eligible sudah di-spin.");
       return;
     }
-
-    const labelMonth = spinNextMonthLabel || nextMk;
 
     try {
-      setPreSpinLoading(true);
+      setMultiSpinLoading(true);
 
-      // ✅ voucher untuk bulan depan (dokumen diskon bulan depan)
-      const bonusId = `${selected.id}_${nextMk}`;
-      const refx = doc(db, "student_discounts", bonusId);
+      const discId = `${selected.id}_${currentMk}`;
+      const refx = doc(db, "student_discounts", discId);
 
-      // kalau sudah ada voucher bulan depan, jangan spin lagi
+      // kalau sudah ada voucher, catat lalu selesai step ini (tanpa mengurangi jatah)
       const exists = await getDoc(refx);
       if (exists.exists()) {
         const ex = exists.data() as any;
         const nominalEx = Math.max(Number(ex?.nominal || 0), 0);
 
-        setPreSpinDone(true);
-        setPreSpinMonthKey(nextMk);
-        setPreSpinMonthLabel(labelMonth);
-        setPreSpinNominal(nominalEx);
+        setMultiSpinDoneMap((p) => ({ ...p, [currentMk]: nominalEx }));
+        setLastSpinAwardTotal((p) => p + nominalEx);
 
-        Alert.alert(
-          "Info",
-          `Kupon untuk ${labelMonth} sudah ada (${rupiah(nominalEx)}).`
+        // rebuild invoice agar potongan langsung kepotong
+        setInvoiceLoading(true);
+        const nextMonths = invoiceDraft.monthKeys
+          .map((k) => monthOptions.find((m) => m.key === k))
+          .filter(Boolean)
+          .map((m: any) => ({ key: m.key, label: m.label }));
+
+        const rebuilt = await buildDraftForMonths(
+          selected,
+          nextMonths,
+          invoiceDraft.paymentGroupId
         );
+        setInvoiceDraft((p) =>
+          p
+            ? {
+                ...rebuilt,
+                metode: p.metode,
+                proofDataUrl: p.proofDataUrl,
+                proofMime: p.proofMime,
+                proofType: p.proofType,
+              }
+            : rebuilt
+        );
+        setInvoiceLoading(false);
         return;
       }
 
       const picked = pickByWeight(hadiah);
-      if (!picked) {
-        Alert.alert("Gagal", "Data hadiah kosong / peluang 0 semua.");
-        return;
-      }
+      if (!picked) throw new Error("Hadiah spin kosong.");
 
       const nominalBonus = Math.max(Number(picked.nominal || 0), 0);
 
@@ -931,56 +934,57 @@ export default function BayarSPP() {
           studentName: selected.name,
           branchId,
           branchName,
-          monthKey: nextMk,
+          monthKey: currentMk,
           label: picked.label,
           nominal: nominalBonus,
           createdAt: serverTimestamp(),
-
-          // ✅ sumber: pre-pay
-          source: "SPIN_PREPAY_FOR_NEXT_MONTH",
+          source: "SPIN_STEP_BY_STEP",
           sourcePaymentGroupId: invoiceDraft.paymentGroupId,
-          dipakaiBulanDepan: true,
+          // ✅ dipakai untuk invoice bulan itu (bulan yang di-spin)
+          dipakaiBulanDepan: false,
         });
       });
 
-      setPreSpinDone(true);
-      setPreSpinMonthKey(nextMk);
-      setPreSpinMonthLabel(labelMonth);
-      setPreSpinNominal(nominalBonus);
+      setMultiSpinDoneMap((p) => ({ ...p, [currentMk]: nominalBonus }));
+      setLastSpinAwardTotal((p) => p + nominalBonus);
 
-      // update sheet (voucherDidapat)
-      try {
-        const now2 = new Date();
-        await pushPaymentToSheet({
-          branchId,
-          branchName,
-          invoiceNo: invoiceDraft.paymentGroupId,
-          tanggal: formatTanggalOnly(now2),
-          jam: formatJamOnly(now2),
-          studentName: invoiceDraft.studentName,
-          jenisPembayaran: `SPP ${invoiceDraft.monthLabels.join(" + ")}`,
-          metode: invoiceDraft.metode,
-          nominal: invoiceDraft.total,
-          voucherDipakai: invoiceDraft.potongan,
-          voucherDidapat: nominalBonus,
-          monthKey: invoiceDraft.monthKeys?.[0],
-          createdAtIso: now2.toISOString(),
-        });
-      } catch (e) {
-        console.log("push sheet (pre-spin) error:", e);
-      }
-
+      const lab =
+        monthOptions.find((m) => m.key === currentMk)?.label || currentMk;
       Alert.alert(
         "🎁 Spin Berhasil",
-        `Kupon untuk ${labelMonth}\nHadiah: ${picked.label}\nPotongan: ${rupiah(
-          nominalBonus
-        )}`
+        `${lab}\n${picked.label} (${rupiah(nominalBonus)})`
       );
+
+      // ✅ rebuild invoice agar potongan langsung masuk rincian (Feb & Mar kelihatan)
+      setInvoiceLoading(true);
+      const nextMonths = invoiceDraft.monthKeys
+        .map((k) => monthOptions.find((m) => m.key === k))
+        .filter(Boolean)
+        .map((m: any) => ({ key: m.key, label: m.label }));
+
+      const rebuilt = await buildDraftForMonths(
+        selected,
+        nextMonths,
+        invoiceDraft.paymentGroupId
+      );
+      setInvoiceDraft((p) =>
+        p
+          ? {
+              ...rebuilt,
+              metode: p.metode,
+              proofDataUrl: p.proofDataUrl,
+              proofMime: p.proofMime,
+              proofType: p.proofType,
+            }
+          : rebuilt
+      );
+      setInvoiceLoading(false);
     } catch (e: any) {
       console.log(e);
       Alert.alert("Gagal", e?.message || "Spin gagal.");
     } finally {
-      setPreSpinLoading(false);
+      setMultiSpinLoading(false);
+      setInvoiceLoading(false);
     }
   }
 
@@ -1019,7 +1023,6 @@ export default function BayarSPP() {
       }
 
       await runTransaction(db, async (trx) => {
-        // ---- 1) SEMUA READ DULU ----
         const invRefs = monthKeys.map((mk) => {
           const invId = invoiceNoOf(branchId, mk, selected.id);
           return { mk, invId, ref: doc(db, "invoices", invId) };
@@ -1035,7 +1038,6 @@ export default function BayarSPP() {
           discRefs.map((x) => trx.get(x.ref))
         );
 
-        // cek sudah pernah bayar
         const alreadyPaid: string[] = [];
         invSnaps.forEach((snap, i) => {
           if (snap.exists()) alreadyPaid.push(invRefs[i].mk);
@@ -1046,7 +1048,6 @@ export default function BayarSPP() {
           );
         }
 
-        // potongan per bulan
         const discMap = new Map<string, number>();
         discSnaps.forEach((snap, i) => {
           const mk = discRefs[i].mk;
@@ -1056,7 +1057,6 @@ export default function BayarSPP() {
           discMap.set(mk, pot);
         });
 
-        // ---- 2) WRITE ----
         for (let i = 0; i < invRefs.length; i++) {
           const { mk, invId, ref } = invRefs[i];
           const labelMk = invoiceDraft.monthLabels[i] || mk;
@@ -1136,12 +1136,10 @@ export default function BayarSPP() {
           : p
       );
 
-      // refresh badge status
       if (selected) {
         await loadPaidMonthsForStudent(selected);
       }
 
-      // push sheet 1 baris (group)
       try {
         const now = new Date();
         await pushPaymentToSheet({
@@ -1155,7 +1153,7 @@ export default function BayarSPP() {
           metode: invoiceDraft.metode,
           nominal: invoiceDraft.total,
           voucherDipakai: invoiceDraft.potongan,
-          voucherDidapat: preSpinDone ? preSpinNominal : 0,
+          voucherDidapat: lastSpinAwardTotal,
           monthKey: invoiceDraft.monthKeys?.[0],
           createdAtIso: now.toISOString(),
         });
@@ -1277,9 +1275,11 @@ export default function BayarSPP() {
         </View>
 
         <Text style={styles.note}>
-          ℹ️ Jika bayar sebelum tanggal {sebelumTanggal}, maka tombol Spin
-          terbuka dan hanya bisa 1x untuk potongan bulan setelah bulan terakhir
-          yang dipilih (contoh bayar Jan–Mar ⇒ spin untuk April).
+          ℹ️ Jika bayar sebelum tanggal {sebelumTanggal}, tombol Spin terbuka.
+          {"\n"}✅ Spin sekarang{" "}
+          <Text style={{ fontWeight: "900" }}>mengikuti pilihan bulan</Text>:
+          jumlah spin = (bulan dipilih - 1).
+          {"\n"}Contoh: pilih Jan+Feb+Mar ⇒ Spin 2x: untuk Feb lalu Mar.
         </Text>
 
         <View style={{ height: Platform.OS === "ios" ? 8 : 16 }} />
@@ -1554,14 +1554,184 @@ export default function BayarSPP() {
                   </View>
                 </View>
 
-                {/* rincian */}
+                {/* ✅ SPIN STEP-BY-STEP */}
+                {invoiceDraft.status !== "PAID" && (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={styles.invSectionTitle}>
+                      Spin Potongan (Untuk Bulan Setelah Bulan Pertama)
+                    </Text>
+
+                    {(() => {
+                      const eligible = getEligibleSpinMonths(
+                        invoiceDraft.monthKeys
+                      );
+                      const pending = eligible.filter(
+                        (mk) => multiSpinDoneMap[mk] == null
+                      );
+
+                      const stepNow = eligible.length - pending.length + 1;
+                      const stepMax = eligible.length;
+
+                      return (
+                        <>
+                          <View style={styles.spinInfoBox}>
+                            <Text style={styles.spinInfoText}>
+                              Status:{" "}
+                              <Text
+                                style={{ fontWeight: "900", color: THEME.text }}
+                              >
+                                {canSpinToday ? "BISA SPIN" : "TERKUNCI"}
+                              </Text>
+                              {"\n"}
+                              Eligible:{" "}
+                              <Text
+                                style={{ fontWeight: "900", color: THEME.text }}
+                              >
+                                {eligible.length}x
+                              </Text>
+                              {"\n"}
+                              Total Hadiah Spin (yang sudah didapat):{" "}
+                              <Text
+                                style={{ fontWeight: "900", color: THEME.text }}
+                              >
+                                {rupiah(lastSpinAwardTotal)}
+                              </Text>
+                            </Text>
+                          </View>
+
+                          <TouchableOpacity
+                            activeOpacity={0.9}
+                            style={[
+                              styles.spinPreBtn,
+                              (!canSpinToday ||
+                                multiSpinLoading ||
+                                !eligible.length ||
+                                !pending.length ||
+                                spinLoading) && {
+                                opacity: 0.45,
+                              },
+                            ]}
+                            onPress={spinNext}
+                            disabled={
+                              !canSpinToday ||
+                              multiSpinLoading ||
+                              spinLoading ||
+                              eligible.length === 0 ||
+                              pending.length === 0
+                            }
+                          >
+                            {multiSpinLoading ? (
+                              <ActivityIndicator />
+                            ) : (
+                              <>
+                                <Ionicons
+                                  name="gift-outline"
+                                  size={18}
+                                  color="#0F172A"
+                                />
+                                <Text style={styles.spinPreText}>
+                                  {eligible.length === 0
+                                    ? "Tidak ada bulan eligible untuk spin"
+                                    : pending.length === 0
+                                    ? "Semua bulan eligible sudah dapat potongan"
+                                    : `Spin ${stepNow}/${stepMax} (untuk ${
+                                        monthOptions.find(
+                                          (m) => m.key === pending[0]
+                                        )?.label || pending[0]
+                                      })`}
+                                </Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+
+                          {eligible.length > 0 && (
+                            <View style={styles.spinListBox}>
+                              {eligible.map((mk) => {
+                                const lab =
+                                  monthOptions.find((m) => m.key === mk)
+                                    ?.label || mk;
+                                const val = multiSpinDoneMap[mk];
+                                return (
+                                  <View key={mk} style={styles.spinListRow}>
+                                    <Text style={styles.spinListLeft}>
+                                      {lab}
+                                    </Text>
+                                    <Text
+                                      style={[
+                                        styles.spinListRight,
+                                        val != null &&
+                                          val > 0 && { color: "#16A34A" },
+                                      ]}
+                                    >
+                                      {val == null ? "-" : `- ${rupiah(val)}`}
+                                    </Text>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          )}
+
+                          <Text style={[styles.note, { marginTop: 8 }]}>
+                            * Contoh: Jan+Feb+Mar ⇒ Spin 2x: untuk Feb lalu Mar.
+                            {"\n"}* Setelah spin, potongan langsung masuk ke
+                            rincian invoice (lihat potongan Feb & Mar).
+                          </Text>
+                        </>
+                      );
+                    })()}
+                  </View>
+                )}
+
+                {/* ✅ rincian (detail per bulan: termasuk potongan Feb & Mar) */}
                 <View style={styles.invBox}>
                   <Text style={styles.invSectionTitle}>Rincian</Text>
 
                   <View style={styles.divDashed} />
 
+                  {invoiceDraft.monthKeys.map((mk, idx) => {
+                    const label = invoiceDraft.monthLabels[idx] || mk;
+                    const nominal = Number(selected?.spp || 0);
+                    const pot = Math.max(
+                      Number(invoiceDraft.potonganByMonth?.[mk] || 0),
+                      0
+                    );
+                    const subTotal = Math.max(nominal - pot, 0);
+
+                    return (
+                      <View key={mk} style={styles.itemMonthCard}>
+                        <View style={styles.itemMonthRow}>
+                          <Text style={styles.itemMonthTitle}>{label}</Text>
+                          <Text style={styles.itemMonthNom}>
+                            {rupiah(nominal)}
+                          </Text>
+                        </View>
+
+                        <View style={styles.itemMonthRow2}>
+                          <Text style={styles.itemMonthSub}>Potongan</Text>
+                          <Text
+                            style={[
+                              styles.itemMonthSubV,
+                              pot > 0 && { color: "#16A34A" },
+                            ]}
+                          >
+                            - {rupiah(pot)}
+                          </Text>
+                        </View>
+
+                        <View style={styles.itemMonthRow2}>
+                          <Text style={styles.itemMonthSub}>Subtotal</Text>
+                          <Text style={styles.itemMonthSubV}>
+                            {rupiah(subTotal)}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+
+                  <View style={styles.divSolid} />
+
                   <View style={styles.invRow}>
-                    <Text style={styles.invK}>Nominal SPP</Text>
+                    <Text style={styles.invK}>Nominal SPP (Total)</Text>
                     <Text style={styles.invV}>
                       {rupiah(invoiceDraft.nominal)}{" "}
                       <Text style={{ color: THEME.sub, fontWeight: "800" }}>
@@ -1571,7 +1741,7 @@ export default function BayarSPP() {
                   </View>
 
                   <View style={styles.invRow}>
-                    <Text style={styles.invK}>Potongan</Text>
+                    <Text style={styles.invK}>Potongan (Total)</Text>
                     <Text
                       style={[
                         styles.invV,
@@ -1582,8 +1752,6 @@ export default function BayarSPP() {
                     </Text>
                   </View>
 
-                  <View style={styles.divSolid} />
-
                   <View style={styles.invTotalRow}>
                     <Text style={styles.invTotalK}>TOTAL BAYAR</Text>
                     <Text style={styles.invTotalV}>
@@ -1591,73 +1759,6 @@ export default function BayarSPP() {
                     </Text>
                   </View>
                 </View>
-
-                {/* ✅ SPIN PRE-PAY (1x, sebelum upload bukti / sebelum bayar) */}
-                {invoiceDraft.status !== "PAID" && (
-                  <View style={{ marginTop: 12 }}>
-                    <Text style={styles.invSectionTitle}>
-                      Spin Potongan Bulan Depan
-                    </Text>
-
-                    <View style={styles.spinInfoBox}>
-                      <Text style={styles.spinInfoText}>
-                        Target kupon:{" "}
-                        <Text style={{ fontWeight: "900", color: THEME.text }}>
-                          {spinNextMonthLabel || "-"}
-                        </Text>
-                        {"\n"}
-                        Status:{" "}
-                        <Text style={{ fontWeight: "900", color: THEME.text }}>
-                          {canSpinToday ? "BISA SPIN" : "TERKUNCI"}
-                        </Text>
-                      </Text>
-                    </View>
-
-                    <TouchableOpacity
-                      activeOpacity={0.9}
-                      style={[
-                        styles.spinPreBtn,
-                        (!canSpinToday ||
-                          preSpinDone ||
-                          preSpinLoading ||
-                          !spinNextMonthKey ||
-                          spinLoading) && { opacity: 0.45 },
-                      ]}
-                      onPress={spinBeforePayOnce}
-                      disabled={
-                        !canSpinToday ||
-                        preSpinDone ||
-                        preSpinLoading ||
-                        !spinNextMonthKey ||
-                        spinLoading
-                      }
-                    >
-                      {preSpinLoading ? (
-                        <ActivityIndicator />
-                      ) : (
-                        <>
-                          <Ionicons
-                            name="gift-outline"
-                            size={18}
-                            color="#0F172A"
-                          />
-                          <Text style={styles.spinPreText}>
-                            {preSpinDone
-                              ? `Kupon ${preSpinMonthLabel} didapat: ${rupiah(
-                                  preSpinNominal
-                                )}`
-                              : "Spin Sekarang (1x)"}
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-
-                    <Text style={[styles.note, { marginTop: 8 }]}>
-                      * Spin hanya 1x per pembayaran, untuk potongan bulan
-                      setelah bulan terakhir yang kamu pilih.
-                    </Text>
-                  </View>
-                )}
 
                 {/* metode */}
                 <View style={{ marginTop: 12 }}>
@@ -1854,14 +1955,6 @@ export default function BayarSPP() {
                       {invoiceDraft.monthLabels.join(", ")}.
                     </Text>
                   </View>
-                )}
-
-                {!!spinBonusText && (
-                  <Text
-                    style={[styles.note, { marginTop: 10, color: "#0F172A" }]}
-                  >
-                    {spinBonusText}
-                  </Text>
                 )}
 
                 <TouchableOpacity
@@ -2090,6 +2183,7 @@ const styles = StyleSheet.create({
   invV: { color: THEME.text, fontWeight: "900", fontSize: 12 },
 
   invTotalRow: {
+    marginTop: 10,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -2288,7 +2382,7 @@ const styles = StyleSheet.create({
   },
   paidText: { fontWeight: "900", color: "#0F172A", flex: 1 },
 
-  // ✅ pre-spin ui
+  // ✅ spin ui
   spinInfoBox: {
     marginTop: 8,
     backgroundColor: "rgba(219,234,254,0.55)",
@@ -2316,6 +2410,51 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   spinPreText: { fontWeight: "900", color: THEME.text },
+
+  spinListBox: {
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    backgroundColor: "rgba(248,250,252,1)",
+    padding: 10,
+  },
+  spinListRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(226,232,240,0.65)",
+  },
+  spinListLeft: { fontWeight: "900", color: THEME.text, fontSize: 12 },
+  spinListRight: { fontWeight: "900", color: THEME.sub, fontSize: 12 },
+
+  // ✅ per-bulan card di rincian
+  itemMonthCard: {
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    backgroundColor: "#fff",
+    padding: 10,
+  },
+  itemMonthRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "center",
+  },
+  itemMonthTitle: { fontWeight: "900", color: THEME.text, fontSize: 12 },
+  itemMonthNom: { fontWeight: "900", color: THEME.text, fontSize: 12 },
+  itemMonthRow2: {
+    marginTop: 6,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  itemMonthSub: { fontWeight: "800", color: THEME.sub, fontSize: 12 },
+  itemMonthSubV: { fontWeight: "900", color: THEME.text, fontSize: 12 },
 
   closeBtn2: { marginTop: 10, alignItems: "center" },
   closeText2: { fontWeight: "900", color: "#EF4444" },
