@@ -727,9 +727,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  meta: { color: "#64748B", fontWeight: "800" },
-  meta2: { color: "#0F172A", fontWeight: "900" },
-  money: { color: "#0F172A", fontWeight: "900" },
+  meta: { color: "#64748B", fontWeight: "700", fontSize: 12 },
+  meta2: { color: "#0F172A", fontWeight: "900", fontSize: 12 },
+  money: { color: "#0F172A", fontWeight: "900", fontSize: 12 },
 
   badge: {
     paddingHorizontal: 10,
@@ -798,7 +798,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  empty: { color: "#64748B", fontWeight: "700" },
+  empty: { color: "#64748B", fontWeight: "700", fontSize: 12 },
 
   // ✅ preview modal
   previewBackdrop: {
@@ -842,5 +842,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     padding: 10,
   },
-  previewMetaText: { color: "#0F172A", fontWeight: "800", lineHeight: 18 },
+  previewMetaText: { color: "#0F172A", fontWeight: "700", lineHeight: 18 },
 });

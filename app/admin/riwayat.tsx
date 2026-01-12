@@ -395,7 +395,7 @@ export default function AdminRiwayatTab() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.brand}>SPP Mobile</Text>
+          <Text style={styles.brand}>Shining Sun 🎈</Text>
           <View style={styles.chip}>
             <Text style={styles.chipText}>
               {headerLoading ? "Memuat..." : branchName}
@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
   brand: {
     fontWeight: "900",
     color: "#1D4ED8",
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
@@ -736,7 +736,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 
-  label: { marginTop: 12, fontWeight: "900", color: "#0F172A" },
+  label: { marginTop: 12, fontWeight: "800", color: "#0F172A", fontSize: 12 },
 
   rangeRow: {
     marginTop: 12,
@@ -755,7 +755,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  dateText: { fontWeight: "900", color: "#0F172A" },
+  dateText: { fontWeight: "900", color: "#0F172A", fontSize: 13 },
 
   applyBtn: {
     marginTop: 14,
@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   name: { fontWeight: "900", color: "#0F172A", fontSize: 15 },
-  sub: { marginTop: 6, color: "#64748B", fontWeight: "700" },
+  sub: { marginTop: 6, color: "#64748B", fontWeight: "700", fontSize: 12 },
   money: { marginTop: 6, fontWeight: "900", color: "#0F172A", fontSize: 16 },
 
   badge: {
@@ -901,5 +901,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     padding: 10,
   },
-  previewMetaText: { color: "#0F172A", fontWeight: "800", lineHeight: 18 },
+  previewMetaText: { color: "#0F172A", fontWeight: "700", lineHeight: 18 },
 });

@@ -159,8 +159,8 @@ export default function TabAkun() {
         contentContainerStyle={[
           styles.scroll,
           {
-            paddingTop: Math.max(insets.top, 14),
-            paddingBottom: tabH + insets.bottom + 18,
+            paddingTop: Math.max(insets.top + 8, 18),
+            paddingBottom: tabH + 18,
           },
         ]}
         showsVerticalScrollIndicator={false}
@@ -268,7 +268,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { fontWeight: "900", color: "#1D4ED8" },
+  brand: { fontWeight: "900", color: "#1D4ED8", letterSpacing: 0.3 },
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
   },
 
   line: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
-  lineText: { color: "#0F172A", fontWeight: "800" },
+  lineText: { color: "#0F172A", fontWeight: "900" },
 
   logoutBtn: {
     marginTop: 16,

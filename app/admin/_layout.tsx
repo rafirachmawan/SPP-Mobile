@@ -2,6 +2,7 @@ import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Platform } from "react-native";
 
 const THEME = {
   primary: "#0EA5E9",
@@ -28,8 +29,9 @@ export default function AdminLayout() {
           paddingBottom: 10 + insets.bottom,
         },
 
+        // ✅ samakan rasa font (lebih mirip style screen lain)
         tabBarLabelStyle: {
-          fontWeight: "800",
+          fontWeight: Platform.OS === "ios" ? "800" : "900",
           fontSize: 11,
         },
       }}
