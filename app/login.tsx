@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,12 +11,15 @@ import {
   ScrollView,
   Alert,
   Dimensions,
+  StatusBar,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// ✅ Firebase
+// ✅ Firebase (LOGIC TETAP)
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase"; // ✅ sesuaikan path
@@ -32,13 +35,67 @@ function normalizeUser(input: string) {
   return `${uname}@cabang.spp`;
 }
 
+const LS_REMEMBER = "spp-login-remember-v1"; // simpan on/off
+const LS_EMAIL = "spp-login-email-v1"; // simpan user/email (bukan password)
+
 export default function Login() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-  const [email, setEmail] = useState(""); // ini input "User" (bisa email / username)
+  const [email, setEmail] = useState(""); // input "User" (bisa email / username)
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [showPass, setShowPass] = useState(false);
+
+  // ✅ Load preferensi remember + email tersimpan (agar besok tinggal isi password)
+  useEffect(() => {
+    (async () => {
+      try {
+        const savedRemember = await AsyncStorage.getItem(LS_REMEMBER);
+        const rememberOn = savedRemember == null ? true : savedRemember === "1";
+        setRemember(rememberOn);
+
+        if (rememberOn) {
+          const savedEmail = (await AsyncStorage.getItem(LS_EMAIL)) || "";
+          if (savedEmail) setEmail(savedEmail);
+        }
+      } catch {
+        // abaikan
+      }
+    })();
+  }, []);
+
+  // ✅ Jika user toggle "ingat saya": simpan status, dan kalau OFF hapus email tersimpan
+  useEffect(() => {
+    (async () => {
+      try {
+        await AsyncStorage.setItem(LS_REMEMBER, remember ? "1" : "0");
+        if (!remember) {
+          await AsyncStorage.removeItem(LS_EMAIL);
+        } else {
+          // kalau baru dinyalakan dan email sudah ada, simpan
+          if (email.trim()) await AsyncStorage.setItem(LS_EMAIL, email.trim());
+        }
+      } catch {
+        // abaikan
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remember]);
+
+  // ✅ Saat email berubah dan remember ON, simpan email
+  useEffect(() => {
+    (async () => {
+      try {
+        if (remember) {
+          const v = email.trim();
+          if (v) await AsyncStorage.setItem(LS_EMAIL, v);
+        }
+      } catch {
+        // abaikan
+      }
+    })();
+  }, [email, remember]);
 
   const canSubmit = useMemo(() => {
     return email.trim().length > 0 && password.length > 0;
@@ -48,7 +105,7 @@ export default function Login() {
     const rawInput = email.trim();
     if (!canSubmit) return Alert.alert("Gagal", "User & password wajib diisi.");
 
-    // ✅ di sini yang membedakan: username -> email internal
+    // ✅ username -> email internal
     const loginEmail = normalizeUser(rawInput);
 
     try {
@@ -75,6 +132,12 @@ export default function Login() {
         return Alert.alert("Ditolak", "Akun nonaktif.");
       }
 
+      // ✅ simpan email yang dipakai untuk login (agar besok tinggal isi password)
+      // (password TIDAK disimpan)
+      if (remember) {
+        await AsyncStorage.setItem(LS_EMAIL, rawInput);
+      }
+
       // 4) Routing berdasarkan role (tanpa ubah logika inti kamu)
       const role = String(data.role || "").toUpperCase();
 
@@ -83,8 +146,6 @@ export default function Login() {
       }
 
       if (role === "ADMIN_CABANG") {
-        // ✅ masuk admin cabang
-        // ganti "/admin" kalau route kamu beda
         return router.replace("/admin");
       }
 
@@ -121,64 +182,142 @@ export default function Login() {
   const { height } = Dimensions.get("window");
   const isSmall = height < 700;
 
+  // ✅ Responsive aman: kasih jarak dari notch/statusbar
+  const topSafe = Math.max(insets.top, 12);
+  const scrollTopPadding = topSafe + 14; // supaya tidak mepet ke atas di HP
+
   return (
     <View style={{ flex: 1 }}>
+      <StatusBar
+        barStyle="dark-content"
+        translucent
+        backgroundColor="transparent"
+      />
+
+      {/* BACKGROUND */}
       <LinearGradient
-        colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
+        colors={["#EAF6FF", "#F7FBFF", "#FFFFFF"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
+      {/* Ornamen soft */}
+      <View style={styles.orb1} />
+      <View style={styles.orb2} />
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <ScrollView
-          contentContainerStyle={[styles.scroll, { minHeight: height }]}
+          contentContainerStyle={[
+            styles.scroll,
+            { minHeight: height, paddingTop: scrollTopPadding },
+          ]}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {/* Back button */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            style={styles.backBtn}
-            onPress={() =>
-              Alert.alert("Back", "Nanti bisa diarahkan ke halaman sebelumnya.")
-            }
-          >
-            <Ionicons name="chevron-back" size={18} color="#0F172A" />
-          </TouchableOpacity>
+          {/* TOP ROW */}
+          <View style={styles.topRow}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.backBtn}
+              onPress={() =>
+                Alert.alert(
+                  "Back",
+                  "Nanti bisa diarahkan ke halaman sebelumnya."
+                )
+              }
+            >
+              <Ionicons name="chevron-back" size={18} color="#0F172A" />
+            </TouchableOpacity>
 
-          <View style={{ height: isSmall ? 26 : 54 }} />
-
-          <Text style={styles.hi}>Shining Sun 🌤️</Text>
-          <Text style={styles.desc}>Cerdas • Ceria • Kreatif • Mandiri </Text>
-
-          <View style={{ height: isSmall ? 14 : 26 }} />
-
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Login Admin</Text>
-            <Text style={styles.cardSub}>
-              Masukkan email superadmin atau username admin cabang.
-            </Text>
-
-            <Text style={[styles.label, { marginTop: 14 }]}>User</Text>
-            <View style={styles.inputWrap}>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="contoh: superadmin@spp.com / adminA"
-                placeholderTextColor="#94A3B8"
-                autoCapitalize="none"
-                style={styles.input}
+            <View style={styles.badge}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={14}
+                color="#0369A1"
               />
-              <View style={styles.rightIcon}>
-                <Ionicons name="person-outline" size={18} color="#64748B" />
+              <Text style={styles.badgeText}>Secure Login</Text>
+            </View>
+          </View>
+
+          <View style={{ height: isSmall ? 16 : 28 }} />
+
+          {/* HEADER */}
+          <View style={styles.headerWrap}>
+            <View style={styles.logoCircle}>
+              <LinearGradient
+                colors={["#0EA5E9", "#38BDF8"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.logoGrad}
+              >
+                <Ionicons name="school-outline" size={22} color="#FFFFFF" />
+              </LinearGradient>
+            </View>
+
+            <Text style={styles.hi}>Shining Sun</Text>
+            <Text style={styles.desc}>Cerdas • Ceria • Kreatif • Mandiri</Text>
+          </View>
+
+          <View style={{ height: isSmall ? 12 : 18 }} />
+
+          {/* CARD */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View>
+                <Text style={styles.cardTitle}>Login Admin</Text>
+                <Text style={styles.cardSub}>
+                  Masukkan email superadmin atau username admin cabang.
+                </Text>
+              </View>
+              <View style={styles.chip}>
+                <Ionicons name="key-outline" size={14} color="#0F172A" />
+                <Text style={styles.chipText}>Auth</Text>
               </View>
             </View>
 
+            {/* USER */}
+            <Text style={[styles.label, { marginTop: 16 }]}>User</Text>
+            <View style={styles.inputWrap}>
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color="#64748B"
+                style={styles.leftIcon}
+              />
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="superadmin@spp.com / adminA"
+                placeholderTextColor="#94A3B8"
+                autoCapitalize="none"
+                style={styles.input}
+                returnKeyType="next"
+              />
+              {email.trim().length > 0 ? (
+                <TouchableOpacity
+                  onPress={() => setEmail("")}
+                  activeOpacity={0.8}
+                  style={styles.rightIconBtn}
+                >
+                  <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* PASSWORD */}
             <Text style={[styles.label, { marginTop: 14 }]}>Password</Text>
             <View style={styles.inputWrap}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color="#64748B"
+                style={styles.leftIcon}
+              />
               <TextInput
                 value={password}
                 onChangeText={setPassword}
@@ -186,11 +325,13 @@ export default function Login() {
                 placeholderTextColor="#94A3B8"
                 secureTextEntry={!showPass}
                 style={styles.input}
+                returnKeyType="done"
+                onSubmitEditing={onContinue}
               />
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={() => setShowPass((v) => !v)}
-                style={styles.rightIcon}
+                style={styles.rightIconBtn}
               >
                 <Ionicons
                   name={showPass ? "eye-off-outline" : "eye-outline"}
@@ -200,6 +341,7 @@ export default function Login() {
               </TouchableOpacity>
             </View>
 
+            {/* OPTIONS */}
             <View style={styles.rowBetween}>
               <View style={styles.row}>
                 <Switch
@@ -210,23 +352,49 @@ export default function Login() {
                 />
                 <Text style={styles.remember}>Ingat saya</Text>
               </View>
+
+              <View style={styles.hintPill}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={14}
+                  color="#0369A1"
+                />
+                <Text style={styles.hintPillText}>Email / Username</Text>
+              </View>
             </View>
 
+            {/* BUTTON */}
             <TouchableOpacity
-              activeOpacity={0.9}
+              activeOpacity={0.92}
               onPress={onContinue}
               disabled={!canSubmit}
               style={[styles.primaryBtn, !canSubmit && { opacity: 0.55 }]}
             >
-              <Text style={styles.primaryText}>Masuk</Text>
+              <LinearGradient
+                colors={["#0EA5E9", "#0284C7"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.primaryGrad}
+              >
+                <Text style={styles.primaryText}>Masuk</Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+              </LinearGradient>
             </TouchableOpacity>
 
             <Text style={styles.note}>
-              * Email untuk SUPERADMIN, username untuk ADMIN CABANG.
+              * Jika “Ingat saya” ON, yang disimpan hanya USER (bukan password).
             </Text>
           </View>
 
-          <View style={{ height: isSmall ? 14 : 20 }} />
+          <View style={{ height: 16 }} />
+
+          {/* FOOTER MINI */}
+          <Text style={styles.footer}>
+            © {new Date().getFullYear()} Shining Sun • Sistem SPP
+          </Text>
+
+          {/* ✅ aman untuk gesture bar bawah */}
+          <View style={{ height: Math.max(insets.bottom, 12) }} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -237,46 +405,114 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 22,
-    paddingTop: 18,
-    paddingBottom: 20,
+    paddingBottom: 24,
+  },
+
+  /* Soft Orbs */
+  orb1: {
+    position: "absolute",
+    top: -60,
+    left: -40,
+    width: 190,
+    height: 190,
+    borderRadius: 999,
+    backgroundColor: "rgba(14,165,233,0.18)",
+  },
+  orb2: {
+    position: "absolute",
+    bottom: -70,
+    right: -50,
+    width: 220,
+    height: 220,
+    borderRadius: 999,
+    backgroundColor: "rgba(56,189,248,0.14)",
+  },
+
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   backBtn: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.75)",
+    backgroundColor: "rgba(255,255,255,0.85)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.85)",
+    borderColor: "rgba(226,232,240,0.9)",
+  },
+
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(2,132,199,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(2,132,199,0.18)",
+  },
+  badgeText: {
+    color: "#0369A1",
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
+  headerWrap: {
+    alignItems: "flex-start",
+  },
+  logoCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.9)",
+    padding: 4,
+    marginBottom: 12,
+  },
+  logoGrad: {
+    flex: 1,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   hi: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "900",
     color: "#0F172A",
-    marginTop: 6,
     letterSpacing: 0.2,
   },
   desc: {
     marginTop: 8,
     color: "#64748B",
     lineHeight: 20,
-    maxWidth: 320,
+    maxWidth: 340,
     fontWeight: "700",
   },
 
   card: {
     backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 24,
+    borderRadius: 26,
     padding: 18,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
     shadowColor: "#0F172A",
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 3,
+  },
+
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
   },
   cardTitle: {
     fontSize: 18,
@@ -288,6 +524,24 @@ const styles = StyleSheet.create({
     color: "#64748B",
     lineHeight: 18,
     fontWeight: "600",
+    maxWidth: 260,
+  },
+
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(15,23,42,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(15,23,42,0.08)",
+  },
+  chipText: {
+    color: "#0F172A",
+    fontWeight: "900",
+    fontSize: 12,
   },
 
   label: {
@@ -295,28 +549,33 @@ const styles = StyleSheet.create({
     color: "#0F172A",
     marginBottom: 8,
   },
+
   inputWrap: {
     position: "relative",
     borderWidth: 1,
     borderColor: "#E2E8F0",
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    paddingLeft: 12,
-    paddingRight: 42,
+    borderRadius: 18,
+    paddingLeft: 42,
+    paddingRight: 44,
     paddingVertical: Platform.OS === "ios" ? 12 : 0,
-    height: 48,
+    height: 50,
     justifyContent: "center",
+  },
+  leftIcon: {
+    position: "absolute",
+    left: 14,
   },
   input: {
     fontSize: 14,
     color: "#0F172A",
-    fontWeight: "700",
+    fontWeight: "800",
   },
-  rightIcon: {
+  rightIconBtn: {
     position: "absolute",
-    right: 12,
-    height: 48,
-    width: 30,
+    right: 10,
+    height: 50,
+    width: 36,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -326,6 +585,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
   },
   row: {
     flexDirection: "row",
@@ -337,13 +597,35 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 
+  hintPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(2,132,199,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(2,132,199,0.16)",
+  },
+  hintPillText: {
+    color: "#0369A1",
+    fontWeight: "900",
+    fontSize: 12,
+  },
+
   primaryBtn: {
     marginTop: 16,
-    backgroundColor: "#0EA5E9",
-    paddingVertical: 14,
     borderRadius: 18,
+    overflow: "hidden",
+  },
+  primaryGrad: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
   },
   primaryText: {
     color: "white",
@@ -356,6 +638,14 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textAlign: "center",
     color: "#94A3B8",
+    fontWeight: "700",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+
+  footer: {
+    textAlign: "center",
+    color: "rgba(100,116,139,0.9)",
     fontWeight: "700",
     fontSize: 12,
   },

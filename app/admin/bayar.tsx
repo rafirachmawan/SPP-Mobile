@@ -57,6 +57,7 @@ type Student = {
   type: "Normal" | "Beasiswa 0" | "Beasiswa 100" | "Pertemuan";
   spp: number;
   pertemuan?: number;
+  active: boolean; // ✅ FIX: baca status aktif
 };
 
 type Hadiah = { id: string; label: string; nominal: number; peluang: number };
@@ -430,10 +431,14 @@ export default function BayarSPP() {
             spp: Number(data.sppDefault ?? data.spp ?? 0) || 0,
             pertemuan:
               data.pertemuan != null ? Number(data.pertemuan || 0) : undefined,
+            active: data.active !== false, // ✅ FIX
           };
         });
 
-        setStudents(rows);
+        // ✅ FIX: hanya tampilkan siswa aktif
+        const activeRows = rows.filter((x) => x.active !== false);
+
+        setStudents(activeRows);
         setStudentLoading(false);
       },
       (err) => {
@@ -747,6 +752,23 @@ export default function BayarSPP() {
       return;
     }
 
+    // ✅ FIX: double-check ke Firestore biar siswa nonaktif tidak bisa buka invoice
+    try {
+      const sSnap = await getDoc(doc(db, "students", s.id));
+      if (!sSnap.exists()) {
+        Alert.alert("Gagal", "Data siswa tidak ditemukan.");
+        return;
+      }
+      const sd = sSnap.data() as any;
+      if (sd.active === false) {
+        Alert.alert("Ditolak", "Siswa ini NONAKTIF. Tidak bisa bayar SPP.");
+        return;
+      }
+    } catch (e) {
+      console.log("check active (openInvoice) error:", e);
+      // kalau gagal cek, tetap lanjut sesuai logika lama (biar tidak merusak flow)
+    }
+
     setSelected(s);
     setInvoiceOpen(true);
     setInvoiceLoading(true);
@@ -999,6 +1021,23 @@ export default function BayarSPP() {
       if (!u) {
         Alert.alert("Unauth", "Silakan login ulang.");
         return;
+      }
+
+      // ✅ FIX: FINAL CHECK siswa masih aktif saat bayar
+      try {
+        const sSnap = await getDoc(doc(db, "students", selected.id));
+        if (!sSnap.exists()) {
+          Alert.alert("Gagal", "Data siswa tidak ditemukan.");
+          return;
+        }
+        const sd = sSnap.data() as any;
+        if (sd.active === false) {
+          Alert.alert("Ditolak", "Siswa ini NONAKTIF. Pembayaran dibatalkan.");
+          return;
+        }
+      } catch (e) {
+        console.log("check active (confirmPay) error:", e);
+        // jika gagal cek, lanjut saja sesuai logika lama
       }
 
       const hasProof = !!proofLocal?.dataUrl || !!invoiceDraft.proofDataUrl;
@@ -1278,8 +1317,8 @@ export default function BayarSPP() {
           ℹ️ Jika bayar sebelum tanggal {sebelumTanggal}, tombol Spin terbuka.
           {"\n"}✅ Spin sekarang{" "}
           <Text style={{ fontWeight: "900" }}>mengikuti pilihan bulan</Text>:
-          jumlah spin = (bulan dipilih - 1).
-          {"\n"}Contoh: pilih Jan+Feb+Mar ⇒ Spin 2x: untuk Feb lalu Mar.
+          jumlah spin = (bulan dipilih - 1).{"\n"}Contoh: pilih Jan+Feb+Mar ⇒
+          Spin 2x: untuk Feb lalu Mar.
         </Text>
 
         <View style={{ height: Platform.OS === "ios" ? 8 : 16 }} />
@@ -1607,9 +1646,7 @@ export default function BayarSPP() {
                                 multiSpinLoading ||
                                 !eligible.length ||
                                 !pending.length ||
-                                spinLoading) && {
-                                opacity: 0.45,
-                              },
+                                spinLoading) && { opacity: 0.45 },
                             ]}
                             onPress={spinNext}
                             disabled={
