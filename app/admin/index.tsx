@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Dimensions,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -51,6 +52,9 @@ function monthKeyOf(d: Date) {
 function rupiah(n: number) {
   return "Rp " + Number(n || 0).toLocaleString("id-ID");
 }
+
+const { width: W } = Dimensions.get("window");
+const IS_SMALL = W < 380;
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -175,7 +179,7 @@ export default function AdminDashboard() {
     },
   ];
 
-  const topPad = Math.max(insets.top + 8, 18);
+  const topPad = Math.max(insets.top + 8, 16);
 
   return (
     <View style={{ flex: 1 }}>
@@ -195,9 +199,14 @@ export default function AdminDashboard() {
             <Text style={styles.subtitle}>
               Kelola pembayaran SPP cabang ini.
             </Text>
+
+            {/* (opsional visual) loading profil */}
+            {profileLoading ? (
+              <Text style={styles.profileHint}>Memuat profil cabang...</Text>
+            ) : null}
           </View>
 
-          {/* CHIP CABANG (DIPERKECIL & RAPIH) */}
+          {/* CHIP CABANG */}
           <View style={styles.pill}>
             <Text style={styles.pillText} numberOfLines={1}>
               {branchName}
@@ -211,11 +220,26 @@ export default function AdminDashboard() {
               <View style={styles.statIcon}>
                 <Ionicons name={s.icon as any} size={18} color="#1D4ED8" />
               </View>
-              <Text style={styles.statLabel}>{s.label}</Text>
+
+              <Text style={styles.statLabel} numberOfLines={2}>
+                {s.label}
+              </Text>
+
               {statsLoading ? (
-                <ActivityIndicator size="small" />
+                <View style={{ marginTop: 6 }}>
+                  <ActivityIndicator size="small" />
+                </View>
               ) : (
-                <Text style={styles.statValue}>{s.value}</Text>
+                <Text
+                  style={[
+                    styles.statValue,
+                    s.label === "Nominal Masuk Bulan Ini" &&
+                      styles.statValueMoney,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {s.value}
+                </Text>
               )}
             </View>
           ))}
@@ -237,19 +261,23 @@ export default function AdminDashboard() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{a.title}</Text>
-                <Text style={styles.rowDesc}>{a.desc}</Text>
+                <Text style={styles.rowDesc} numberOfLines={2}>
+                  {a.desc}
+                </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
             </TouchableOpacity>
           ))}
         </View>
+
+        <View style={{ height: 10 }} />
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: 18, paddingBottom: 26 },
+  scroll: { paddingHorizontal: IS_SMALL ? 14 : 16, paddingBottom: 22 },
 
   headerRow: {
     flexDirection: "row",
@@ -259,23 +287,34 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flex: 1 },
 
-  brand: { color: "#2563EB", fontFamily: F.extrabold },
+  brand: {
+    color: "#2563EB",
+    fontFamily: F.extrabold,
+    fontSize: IS_SMALL ? 14 : 15,
+  },
   title: {
     marginTop: 6,
-    fontSize: 26,
+    fontSize: IS_SMALL ? 20 : 22, // ✅ diperkecil
     fontFamily: F.extrabold,
     color: THEME.text,
   },
   subtitle: {
-    marginTop: 8,
+    marginTop: 6,
     color: THEME.sub,
     fontFamily: F.semibold,
-    lineHeight: 20,
+    lineHeight: 18,
+    fontSize: 12,
+  },
+  profileHint: {
+    marginTop: 6,
+    color: "#94A3B8",
+    fontFamily: F.semibold,
+    fontSize: 12,
   },
 
   pill: {
     alignSelf: "flex-start",
-    maxWidth: "45%",
+    maxWidth: "48%",
     backgroundColor: "rgba(219,234,254,0.95)",
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
@@ -285,45 +324,53 @@ const styles = StyleSheet.create({
   },
   pillText: { color: "#1E40AF", fontFamily: F.extrabold, fontSize: 12 },
 
-  statsGrid: { marginTop: 14, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  statsGrid: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8, // ✅ lebih rapat
+  },
   statCard: {
-    width: "48%",
+    width: "48.6%",
+    backgroundColor: THEME.card,
+    borderRadius: 16, // ✅ diperkecil
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    padding: 10, // ✅ diperkecil
+  },
+  statIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 14,
+    backgroundColor: "rgba(219,234,254,0.95)",
+    borderWidth: 1,
+    borderColor: "rgba(191,219,254,1)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+  },
+  statLabel: { color: THEME.sub, fontFamily: F.bold, fontSize: 12 },
+  statValue: {
+    marginTop: 6,
+    color: THEME.text,
+    fontFamily: F.extrabold,
+    fontSize: IS_SMALL ? 18 : 19,
+  },
+  statValueMoney: {
+    fontSize: IS_SMALL ? 15 : 16, // ✅ nominal biasanya panjang
+  },
+
+  card: {
+    marginTop: 12,
     backgroundColor: THEME.card,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
     padding: 12,
   },
-  statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 16,
-    backgroundColor: "rgba(219,234,254,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(191,219,254,1)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  statLabel: { color: THEME.sub, fontFamily: F.bold, fontSize: 12 },
-  statValue: {
-    marginTop: 4,
-    color: THEME.text,
-    fontFamily: F.extrabold,
-    fontSize: 20,
-  },
-
-  card: {
-    marginTop: 14,
-    backgroundColor: THEME.card,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.95)",
-    padding: 12,
-  },
-  cardTitle: { fontSize: 16, fontFamily: F.extrabold, color: THEME.text },
+  cardTitle: { fontSize: 15, fontFamily: F.extrabold, color: THEME.text },
   cardSub: {
-    marginTop: 6,
+    marginTop: 4,
     color: THEME.sub,
     fontFamily: F.semibold,
     fontSize: 12,
@@ -332,30 +379,31 @@ const styles = StyleSheet.create({
   rowBtn: {
     marginTop: 10,
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.9)",
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
-    borderRadius: 18,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
   },
   rowIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 14,
     backgroundColor: "rgba(219,234,254,0.95)",
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
     alignItems: "center",
     justifyContent: "center",
   },
-  rowTitle: { fontFamily: F.extrabold, color: THEME.text },
+  rowTitle: { fontFamily: F.extrabold, color: THEME.text, fontSize: 13 },
   rowDesc: {
     marginTop: 2,
     color: THEME.sub,
     fontFamily: F.semibold,
     fontSize: 12,
+    lineHeight: 16,
   },
 });

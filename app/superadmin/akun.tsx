@@ -1,4 +1,5 @@
 // FILE: app/superadmin/akun.tsx
+// ✅ FULL VERSION — UI lebih compact (tidak kebesaran), logika tetap sama
 
 import React from "react";
 import {
@@ -8,6 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Dimensions,
 } from "react-native";
 import {
   SafeAreaView,
@@ -26,11 +28,15 @@ const F = {
   extrabold: "Inter_800ExtraBold",
 };
 
+const { width: W } = Dimensions.get("window");
+const IS_SMALL = W < 380;
+
 export default function SuperadminAkun() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tabH = useBottomTabBarHeight();
 
+  // ✅ logika tetap: masih dummy user
   const user = {
     nama: "Super Admin",
     email: "superadmin@spp.com",
@@ -63,16 +69,25 @@ export default function SuperadminAkun() {
         contentContainerStyle={[
           styles.scroll,
           {
-            paddingTop: Math.max(insets.top, 14),
-            paddingBottom: tabH + insets.bottom + 18,
+            paddingTop: Math.max(insets.top, 12),
+            paddingBottom: tabH + insets.bottom + 16,
           },
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.brand}>SPP Mobile</Text>
+          <View>
+            <Text style={styles.brand}>SPP Mobile</Text>
+            <Text style={styles.brandSub}>Akun Superadmin</Text>
+          </View>
+
           <View style={styles.chip}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={14}
+              color="#1E40AF"
+            />
             <Text style={styles.chipText}>Superadmin</Text>
           </View>
         </View>
@@ -86,11 +101,15 @@ export default function SuperadminAkun() {
         <View style={styles.card}>
           <View style={styles.avatarRow}>
             <View style={styles.avatar}>
-              <Ionicons name="person" size={22} color="#1E40AF" />
+              <Ionicons name="person" size={20} color="#1E40AF" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.name}>{user.nama}</Text>
-              <Text style={styles.sub}>{user.role}</Text>
+              <Text style={styles.name} numberOfLines={1}>
+                {user.nama}
+              </Text>
+              <Text style={styles.sub} numberOfLines={1}>
+                {user.role}
+              </Text>
             </View>
           </View>
 
@@ -157,7 +176,7 @@ export default function SuperadminAkun() {
           </TouchableOpacity>
 
           <Text style={styles.note}>
-            * UI dibuat lebih “penuh”, data asli nanti dari Firebase.
+            * UI dibuat lebih compact, data asli nanti dari Firebase.
           </Text>
         </View>
 
@@ -176,7 +195,7 @@ export default function SuperadminAkun() {
           </Text>
         </View>
 
-        <View style={{ height: 12 }} />
+        <View style={{ height: 10 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -198,22 +217,41 @@ function InfoLine({
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.lineLabel}>{label}</Text>
-        <Text style={styles.lineValue}>{value}</Text>
+        <Text style={styles.lineValue} numberOfLines={1}>
+          {value}
+        </Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
+  scroll: {
+    paddingHorizontal: IS_SMALL ? 14 : 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+    gap: 10,
+  },
 
   header: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { fontFamily: F.extrabold, color: "#1D4ED8", letterSpacing: 0.3 },
+  brand: {
+    fontFamily: F.extrabold,
+    color: "#1D4ED8",
+    letterSpacing: 0.2,
+    fontSize: IS_SMALL ? 14 : 15,
+  },
+  brandSub: {
+    marginTop: 2,
+    fontFamily: F.semibold,
+    color: "#64748B",
+    fontSize: 12,
+  },
+
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -221,126 +259,142 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   chipText: { color: "#1E40AF", fontFamily: F.extrabold, fontSize: 12 },
 
   title: {
-    fontSize: 26,
+    fontSize: IS_SMALL ? 20 : 22,
     fontFamily: F.extrabold,
     color: "#0F172A",
-    marginTop: 8,
+    marginTop: 2,
   },
   subtitle: {
     color: "#64748B",
-    lineHeight: 20,
+    lineHeight: 18,
     fontFamily: F.semibold,
-    marginTop: 4,
+    marginTop: 2,
+    fontSize: 12,
   },
 
   card: {
     backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 22,
-    padding: 16,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
   cardSoft: {
     backgroundColor: "rgba(255,255,255,0.78)",
-    borderRadius: 22,
-    padding: 16,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
 
-  avatarRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatarRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: "rgba(219,234,254,0.95)",
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
     alignItems: "center",
     justifyContent: "center",
   },
-  name: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 16 },
-  sub: { marginTop: 4, color: "#64748B", fontFamily: F.bold },
+  name: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 15 },
+  sub: { marginTop: 2, color: "#64748B", fontFamily: F.bold, fontSize: 12 },
 
   hr: {
     height: 1,
     backgroundColor: "rgba(226,232,240,0.95)",
-    marginTop: 14,
-    marginBottom: 10,
+    marginTop: 12,
+    marginBottom: 8,
   },
   hr2: {
     height: 1,
     backgroundColor: "rgba(226,232,240,0.95)",
-    marginTop: 12,
-    marginBottom: 12,
+    marginTop: 10,
+    marginBottom: 10,
   },
 
   lineRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 10,
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   lineIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 12,
     backgroundColor: "rgba(226,232,240,0.65)",
     alignItems: "center",
     justifyContent: "center",
   },
   lineLabel: { color: "#64748B", fontFamily: F.extrabold, fontSize: 12 },
-  lineValue: { marginTop: 2, color: "#0F172A", fontFamily: F.extrabold },
+  lineValue: {
+    marginTop: 2,
+    color: "#0F172A",
+    fontFamily: F.extrabold,
+    fontSize: 13,
+  },
 
-  sectionTitle: { marginTop: 2, fontFamily: F.extrabold, color: "#0F172A" },
+  sectionTitle: {
+    marginTop: 2,
+    fontFamily: F.extrabold,
+    color: "#0F172A",
+    fontSize: 13,
+  },
 
   actionRow: {
     marginTop: 10,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    borderRadius: 18,
-    padding: 12,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
   actionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 13,
     backgroundColor: "rgba(219,234,254,0.95)",
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
     alignItems: "center",
     justifyContent: "center",
   },
-  actionTitle: { fontFamily: F.extrabold, color: "#0F172A" },
+  actionTitle: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 13 },
   actionDesc: {
     marginTop: 2,
     color: "#64748B",
     fontFamily: F.bold,
     fontSize: 12,
+    lineHeight: 16,
   },
 
   logoutBtn: {
-    marginTop: 14,
+    marginTop: 12,
     backgroundColor: "#EF4444",
-    paddingVertical: 14,
-    borderRadius: 18,
+    paddingVertical: 12,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
   },
-  logoutText: { color: "white", fontFamily: F.extrabold, fontSize: 15 },
+  logoutText: { color: "white", fontFamily: F.extrabold, fontSize: 14 },
 
   note: {
-    marginTop: 12,
+    marginTop: 10,
     textAlign: "center",
     color: "#94A3B8",
     fontFamily: F.semibold,
@@ -348,11 +402,12 @@ const styles = StyleSheet.create({
   },
 
   tipRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  tipTitle: { fontFamily: F.extrabold, color: "#0F172A" },
+  tipTitle: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 13 },
   tipText: {
     marginTop: 8,
     color: "#475569",
     fontFamily: F.bold,
     lineHeight: 18,
+    fontSize: 12,
   },
 });

@@ -1,5 +1,5 @@
-// FILE: app/superadmin/index.tsx  (atau path dashboard superadmin kamu)
-// ✅ FULL VERSION — teks sudah pakai Inter (fontFamily), logika realtime tetap sama
+// FILE: app/superadmin/index.tsx
+// ✅ FULL VERSION — UI lebih compact (tidak kebesaran), logika realtime tetap sama
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Dimensions,
 } from "react-native";
 import {
   SafeAreaView,
@@ -140,15 +141,24 @@ export default function SuperadminDashboard() {
           styles.scroll,
           {
             // ✅ ini kunci: footbar + safe area bottom (gesture/nav bar) + extra ruang
-            paddingBottom: tabH + insets.bottom + 18,
+            paddingBottom: tabH + insets.bottom + 16,
           },
         ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.brand}>SPP Mobile</Text>
+          <View>
+            <Text style={styles.brand}>SPP Mobile</Text>
+            <Text style={styles.brandSub}>Superadmin</Text>
+          </View>
+
           <View style={styles.chip}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={14}
+              color="#1E40AF"
+            />
             <Text style={styles.chipText}>Superadmin</Text>
           </View>
         </View>
@@ -193,7 +203,10 @@ export default function SuperadminDashboard() {
             {loading ? (
               <MiniLoading />
             ) : (
-              <Text style={styles.miniValue}>
+              <Text
+                style={[styles.miniValue, styles.miniValueMoney]}
+                numberOfLines={1}
+              >
                 {rupiah(summary.bayarBulanIniNominal)}
               </Text>
             )}
@@ -207,7 +220,7 @@ export default function SuperadminDashboard() {
             Shortcut untuk mengatur fitur utama.
           </Text>
 
-          <View style={{ gap: 10, marginTop: 12 }}>
+          <View style={{ gap: 8, marginTop: 10 }}>
             <Action
               icon="business-outline"
               label="Tambah / Kelola Cabang"
@@ -245,7 +258,7 @@ export default function SuperadminDashboard() {
           </TouchableOpacity>
         </View>
 
-        <View style={{ height: 10 }} />
+        <View style={{ height: 8 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -255,14 +268,16 @@ function MiniLoading() {
   return (
     <View
       style={{
-        marginTop: 10,
+        marginTop: 8,
         flexDirection: "row",
         gap: 8,
         alignItems: "center",
       }}
     >
       <ActivityIndicator size="small" />
-      <Text style={{ fontFamily: F.bold, color: "#0F172A" }}>Memuat...</Text>
+      <Text style={{ fontFamily: F.bold, color: "#0F172A", fontSize: 12 }}>
+        Memuat...
+      </Text>
     </View>
   );
 }
@@ -285,23 +300,46 @@ function Action({
       <View style={styles.actionIcon}>
         <Ionicons name={icon} size={18} color="#1E40AF" />
       </View>
-      <Text style={styles.actionText}>{label}</Text>
-      <Ionicons name="chevron-forward" size={20} color="#94A3B8" />
+      <Text style={styles.actionText} numberOfLines={2}>
+        {label}
+      </Text>
+      <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
     </TouchableOpacity>
   );
 }
 
+const { width: W } = Dimensions.get("window");
+const IS_SMALL = W < 380;
+
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
+  // ✅ lebih rapat tapi tetap lega (responsif)
+  scroll: {
+    paddingHorizontal: IS_SMALL ? 14 : 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+    gap: 10,
+  },
 
   header: {
-    paddingHorizontal: 4,
-    paddingTop: 4,
+    paddingHorizontal: 2,
+    paddingTop: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { fontFamily: F.extrabold, color: "#1D4ED8", letterSpacing: 0.3 },
+  brand: {
+    fontFamily: F.extrabold,
+    color: "#1D4ED8",
+    letterSpacing: 0.2,
+    fontSize: IS_SMALL ? 14 : 15,
+  },
+  brandSub: {
+    marginTop: 2,
+    fontFamily: F.semibold,
+    color: "#64748B",
+    fontSize: 12,
+  },
+
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -309,87 +347,103 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   chipText: { fontFamily: F.bold, color: "#1E40AF", fontSize: 12 },
 
-  title: { fontFamily: F.extrabold, fontSize: 26, color: "#0F172A" },
+  // ✅ judul diperkecil biar tidak “gede”
+  title: {
+    fontFamily: F.extrabold,
+    fontSize: IS_SMALL ? 20 : 22,
+    color: "#0F172A",
+  },
   subtitle: {
     fontFamily: F.semibold,
     color: "#64748B",
-    lineHeight: 20,
+    lineHeight: 18,
     marginTop: 2,
+    fontSize: 12,
   },
 
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 4 },
+  // ✅ grid lebih rapat
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
+
   miniCard: {
-    width: "48.4%",
+    width: "48.6%",
     backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 18,
-    padding: 12,
+    borderRadius: 16,
+    padding: 10,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
-  miniLabel: { fontFamily: F.semibold, color: "#64748B" },
+  miniLabel: { fontFamily: F.semibold, color: "#64748B", fontSize: 12 },
   miniValue: {
-    marginTop: 8,
-    fontSize: 22,
+    marginTop: 6,
+    fontSize: IS_SMALL ? 18 : 19,
     fontFamily: F.extrabold,
     color: "#0F172A",
+  },
+  miniValueMoney: {
+    fontSize: IS_SMALL ? 16 : 17, // ✅ nominal uang biasanya panjang
   },
 
   card: {
     backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 22,
-    padding: 16,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
     shadowColor: "#0F172A",
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 2,
   },
-  cardTitle: { fontFamily: F.extrabold, fontSize: 18, color: "#0F172A" },
+  cardTitle: { fontFamily: F.extrabold, fontSize: 16, color: "#0F172A" },
   cardSub: {
-    marginTop: 6,
+    marginTop: 4,
     fontFamily: F.semibold,
     color: "#64748B",
-    lineHeight: 18,
+    lineHeight: 17,
+    fontSize: 12,
   },
 
   actionItem: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
   },
   actionIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 13,
     backgroundColor: "rgba(219,234,254,0.95)",
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
     alignItems: "center",
     justifyContent: "center",
   },
-  actionText: { flex: 1, fontFamily: F.bold, color: "#0F172A" },
+  actionText: { flex: 1, fontFamily: F.bold, color: "#0F172A", fontSize: 13 },
 
   secondaryBtn: {
     marginTop: 12,
     backgroundColor: "rgba(255,255,255,0.95)",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    paddingVertical: 12,
-    borderRadius: 18,
+    paddingVertical: 11,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
   },
-  secondaryText: { fontFamily: F.bold, color: "#0F172A" },
+  secondaryText: { fontFamily: F.bold, color: "#0F172A", fontSize: 13 },
 });

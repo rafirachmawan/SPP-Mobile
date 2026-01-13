@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Dimensions,
 } from "react-native";
 import {
   SafeAreaView,
@@ -22,6 +23,14 @@ import { auth, db } from "../../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { signOut as signOutAuth } from "firebase/auth";
 
+// ✅ Inter font map
+const F = {
+  regular: "Inter_400Regular",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+  extrabold: "Inter_800ExtraBold",
+};
+
 type Profile = {
   uid: string;
   nama: string;
@@ -30,6 +39,9 @@ type Profile = {
   active: boolean;
   branchId: string; // cabangId/branchId diseragamkan ke branchId
 };
+
+const { width: W } = Dimensions.get("window");
+const IS_SMALL = W < 380;
 
 export default function TabAkun() {
   const router = useRouter();
@@ -159,15 +171,20 @@ export default function TabAkun() {
         contentContainerStyle={[
           styles.scroll,
           {
-            paddingTop: Math.max(insets.top + 8, 18),
-            paddingBottom: tabH + 18,
+            paddingTop: Math.max(insets.top + 8, 14),
+            paddingBottom: tabH + insets.bottom + 16,
           },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.brand}>Shining Sun 🎈</Text>
+          <View>
+            <Text style={styles.brand}>Shining Sun 🎈</Text>
+            <Text style={styles.brandSub}>Akun Admin</Text>
+          </View>
+
           <View style={styles.chip}>
+            <Ionicons name="person-circle-outline" size={14} color="#1E40AF" />
             <Text style={styles.chipText}>Akun</Text>
           </View>
         </View>
@@ -179,9 +196,9 @@ export default function TabAkun() {
 
         <View style={styles.card}>
           {loading ? (
-            <View style={{ alignItems: "center", paddingVertical: 18 }}>
+            <View style={{ alignItems: "center", paddingVertical: 16 }}>
               <ActivityIndicator />
-              <Text style={[styles.note, { marginTop: 10 }]}>
+              <Text style={[styles.note, { marginTop: 8 }]}>
                 Memuat akun...
               </Text>
             </View>
@@ -191,11 +208,13 @@ export default function TabAkun() {
             <>
               <View style={styles.avatarRow}>
                 <View style={styles.avatar}>
-                  <Ionicons name="person" size={22} color="#1E40AF" />
+                  <Ionicons name="person" size={20} color="#1E40AF" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.name}>{profile.nama}</Text>
-                  <Text style={styles.sub}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {profile.nama}
+                  </Text>
+                  <Text style={styles.sub} numberOfLines={1}>
                     {roleLabel} • {branchName}
                   </Text>
                 </View>
@@ -203,33 +222,13 @@ export default function TabAkun() {
 
               <View style={styles.hr} />
 
-              <View style={styles.line}>
-                <Ionicons name="mail-outline" size={18} color="#64748B" />
-                <Text style={styles.lineText}>{emailInternal}</Text>
-              </View>
-
-              <View style={styles.line}>
-                <Ionicons
-                  name="person-circle-outline"
-                  size={18}
-                  color="#64748B"
-                />
-                <Text style={styles.lineText}>@{profile.username || "-"}</Text>
-              </View>
-
-              <View style={styles.line}>
-                <Ionicons name="location-outline" size={18} color="#64748B" />
-                <Text style={styles.lineText}>{branchName}</Text>
-              </View>
-
-              <View style={styles.line}>
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={18}
-                  color="#64748B"
-                />
-                <Text style={styles.lineText}>{roleLabel}</Text>
-              </View>
+              <InfoLine icon="mail-outline" value={emailInternal} />
+              <InfoLine
+                icon="person-circle-outline"
+                value={`@${profile.username || "-"}`}
+              />
+              <InfoLine icon="location-outline" value={branchName} />
+              <InfoLine icon="shield-checkmark-outline" value={roleLabel} />
 
               <TouchableOpacity
                 activeOpacity={0.9}
@@ -248,27 +247,52 @@ export default function TabAkun() {
           )}
         </View>
 
-        <View style={{ height: 12 }} />
+        <View style={{ height: 10 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+function InfoLine({ icon, value }: { icon: any; value: string }) {
+  return (
+    <View style={styles.line}>
+      <View style={styles.lineIcon}>
+        <Ionicons name={icon} size={16} color="#64748B" />
+      </View>
+      <Text style={styles.lineText} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   scroll: {
-    paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 24,
-    gap: 12,
+    paddingHorizontal: IS_SMALL ? 14 : 16,
+    paddingTop: 12,
+    paddingBottom: 20,
+    gap: 10,
   },
 
   header: {
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  brand: { fontWeight: "900", color: "#1D4ED8", letterSpacing: 0.3 },
+  brand: {
+    fontFamily: F.extrabold,
+    color: "#1D4ED8",
+    letterSpacing: 0.2,
+    fontSize: IS_SMALL ? 14 : 15,
+  },
+  brandSub: {
+    marginTop: 2,
+    fontFamily: F.semibold,
+    color: "#64748B",
+    fontSize: 12,
+  },
+
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -276,66 +300,98 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
-  chipText: { color: "#1E40AF", fontWeight: "900", fontSize: 12 },
+  chipText: { color: "#1E40AF", fontFamily: F.extrabold, fontSize: 12 },
 
-  title: { fontSize: 26, fontWeight: "900", color: "#0F172A" },
-  subtitle: { color: "#64748B", lineHeight: 20, fontWeight: "700" },
+  title: {
+    fontSize: IS_SMALL ? 20 : 22,
+    fontFamily: F.extrabold,
+    color: "#0F172A",
+  },
+  subtitle: {
+    color: "#64748B",
+    lineHeight: 18,
+    fontFamily: F.semibold,
+    fontSize: 12,
+    marginTop: 2,
+  },
 
   card: {
     backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 22,
-    padding: 16,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
     shadowColor: "#0F172A",
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 2,
   },
 
-  avatarRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  avatarRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: "rgba(219,234,254,0.95)",
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
     alignItems: "center",
     justifyContent: "center",
   },
-  name: { fontWeight: "900", color: "#0F172A", fontSize: 16 },
-  sub: { marginTop: 4, color: "#64748B", fontWeight: "700" },
+  name: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 15 },
+  sub: { marginTop: 2, color: "#64748B", fontFamily: F.bold, fontSize: 12 },
 
   hr: {
     height: 1,
     backgroundColor: "rgba(226,232,240,0.95)",
-    marginTop: 14,
-    marginBottom: 12,
+    marginTop: 12,
+    marginBottom: 10,
   },
 
-  line: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10 },
-  lineText: { color: "#0F172A", fontWeight: "900" },
+  line: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+  },
+  lineIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: "rgba(226,232,240,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lineText: {
+    flex: 1,
+    color: "#0F172A",
+    fontFamily: F.extrabold,
+    fontSize: 13,
+  },
 
   logoutBtn: {
-    marginTop: 16,
+    marginTop: 12,
     backgroundColor: "#EF4444",
-    paddingVertical: 14,
-    borderRadius: 18,
+    paddingVertical: 12,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
   },
-  logoutText: { color: "white", fontWeight: "900", fontSize: 15 },
+  logoutText: { color: "white", fontFamily: F.extrabold, fontSize: 14 },
 
   note: {
-    marginTop: 12,
+    marginTop: 10,
     textAlign: "center",
     color: "#94A3B8",
-    fontWeight: "700",
+    fontFamily: F.semibold,
     fontSize: 12,
+    lineHeight: 16,
   },
 });
