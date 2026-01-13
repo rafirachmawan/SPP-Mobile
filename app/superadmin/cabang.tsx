@@ -1,5 +1,6 @@
-// FILE: app/superadmin/cabang.tsx  (atau sesuai route kamu)
-// ✅ FULL — hanya rapihin font (Inter) + konsisten style, LOGIKA TETAP sama persis.
+// FILE: app/superadmin/unit.tsx  (atau tetap app/superadmin/cabang.tsx kalau route tidak mau diubah)
+// ✅ FULL — semua teks/label "cabang" diganti jadi "unit" TANPA mengubah logika.
+// ✅ Firestore collection tetap "branches" (biar data & rules tidak berubah)
 
 import React, { useMemo, useState, useEffect } from "react";
 import {
@@ -33,7 +34,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 
-type Cabang = {
+type Unit = {
   id: string; // doc id firestore
   nama: string;
   alamat?: string;
@@ -61,11 +62,11 @@ const F = {
   extrabold: "Inter_800ExtraBold",
 };
 
-export default function CabangPage() {
+export default function UnitPage() {
   const insets = useSafeAreaInsets();
   const tabH = useBottomTabBarHeight();
 
-  const [items, setItems] = useState<Cabang[]>([]);
+  const [items, setItems] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [q, setQ] = useState("");
@@ -87,7 +88,7 @@ export default function CabangPage() {
     const unsub = onSnapshot(
       qRef,
       (snap) => {
-        const rows: Cabang[] = snap.docs.map((d) => {
+        const rows: Unit[] = snap.docs.map((d) => {
           const data = d.data() as any;
           return {
             id: d.id,
@@ -103,7 +104,7 @@ export default function CabangPage() {
       (err) => {
         console.log("branches snapshot error:", err);
         setLoading(false);
-        Alert.alert("Gagal", "Tidak bisa mengambil data cabang (cek rules).");
+        Alert.alert("Gagal", "Tidak bisa mengambil data unit (cek rules).");
       }
     );
 
@@ -135,7 +136,7 @@ export default function CabangPage() {
     const n = nama.trim();
     const a = alamat.trim();
 
-    if (!n) return Alert.alert("Gagal", "Nama cabang wajib diisi.");
+    if (!n) return Alert.alert("Gagal", "Nama unit wajib diisi.");
 
     try {
       const uid = auth.currentUser?.uid;
@@ -150,7 +151,7 @@ export default function CabangPage() {
           updatedBy: uid,
         });
 
-        Alert.alert("Berhasil", "Cabang berhasil diupdate.");
+        Alert.alert("Berhasil", "Unit berhasil diupdate.");
       } else {
         // ✅ ADD
         await addDoc(collection(db, "branches"), {
@@ -161,18 +162,18 @@ export default function CabangPage() {
           createdBy: uid,
         });
 
-        Alert.alert("Berhasil", "Cabang berhasil ditambahkan.");
+        Alert.alert("Berhasil", "Unit berhasil ditambahkan.");
       }
 
       setShowForm(false);
       resetForm();
     } catch (e: any) {
       console.log("save branch error:", e);
-      Alert.alert("Gagal", e?.message || "Tidak bisa menyimpan cabang.");
+      Alert.alert("Gagal", e?.message || "Tidak bisa menyimpan unit.");
     }
   }
 
-  async function onToggleAktif(item: Cabang) {
+  async function onToggleAktif(item: Unit) {
     try {
       const uid = auth.currentUser?.uid || null;
       await updateDoc(doc(db, "branches", item.id), {
@@ -182,11 +183,11 @@ export default function CabangPage() {
       });
     } catch (e: any) {
       console.log("toggle error:", e);
-      Alert.alert("Gagal", e?.message || "Tidak bisa mengubah status cabang.");
+      Alert.alert("Gagal", e?.message || "Tidak bisa mengubah status unit.");
     }
   }
 
-  function onEdit(item: Cabang) {
+  function onEdit(item: Unit) {
     setEditId(item.id);
     setNama(item.nama);
     setAlamat(item.alamat && item.alamat !== "-" ? item.alamat : "");
@@ -220,17 +221,17 @@ export default function CabangPage() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Header title="Cabang" subtitle="Tambah & kelola cabang." />
+        <Header title="Unit" subtitle="Tambah & kelola unit." />
 
         {/* Search + Add */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Cari Cabang</Text>
+          <Text style={styles.cardTitle}>Cari Unit</Text>
 
           <View style={styles.inputWrap}>
             <TextInput
               value={q}
               onChangeText={setQ}
-              placeholder="Ketik nama cabang..."
+              placeholder="Ketik nama unit..."
               placeholderTextColor="#94A3B8"
               style={styles.input}
             />
@@ -253,22 +254,22 @@ export default function CabangPage() {
               color="#fff"
             />
             <Text style={styles.primaryText}>
-              {showForm ? "Tutup Form" : "Tambah Cabang"}
+              {showForm ? "Tutup Form" : "Tambah Unit"}
             </Text>
           </TouchableOpacity>
 
           {showForm && (
             <View style={styles.formBox}>
               <Text style={styles.label}>
-                {editId ? "Edit Cabang" : "Tambah Cabang"}
+                {editId ? "Edit Unit" : "Tambah Unit"}
               </Text>
 
-              <Text style={[styles.label, { marginTop: 12 }]}>Nama Cabang</Text>
+              <Text style={[styles.label, { marginTop: 12 }]}>Nama Unit</Text>
               <View style={styles.inputWrap2}>
                 <TextInput
                   value={nama}
                   onChangeText={setNama}
-                  placeholder="Contoh: Shining Sun - Cabang D"
+                  placeholder="Contoh: Shining Sun - Unit D"
                   placeholderTextColor="#94A3B8"
                   style={styles.input2}
                 />
@@ -298,7 +299,7 @@ export default function CabangPage() {
                   color="#fff"
                 />
                 <Text style={styles.saveText}>
-                  {editId ? "Update Cabang" : "Simpan Cabang"}
+                  {editId ? "Update Unit" : "Simpan Unit"}
                 </Text>
               </TouchableOpacity>
 
@@ -323,10 +324,10 @@ export default function CabangPage() {
         {/* List */}
         <View style={styles.card}>
           <View style={styles.rowBetween}>
-            <Text style={styles.cardTitle}>Daftar Cabang</Text>
+            <Text style={styles.cardTitle}>Daftar Unit</Text>
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
-                {loading ? "..." : `${filtered.length} Cabang`}
+                {loading ? "..." : `${filtered.length} Unit`}
               </Text>
             </View>
           </View>
@@ -335,7 +336,7 @@ export default function CabangPage() {
             {loading ? (
               <Text style={styles.empty}>Memuat data...</Text>
             ) : filtered.length === 0 ? (
-              <Text style={styles.empty}>Belum ada cabang.</Text>
+              <Text style={styles.empty}>Belum ada unit.</Text>
             ) : (
               filtered.map((c) => (
                 <View key={c.id} style={styles.item}>
@@ -393,7 +394,7 @@ export default function CabangPage() {
           </View>
 
           <Text style={styles.note}>
-            * Data cabang tersimpan ke Firebase (Firestore) & realtime.
+            * Data unit tersimpan ke Firebase (Firestore) & realtime.
           </Text>
         </View>
 

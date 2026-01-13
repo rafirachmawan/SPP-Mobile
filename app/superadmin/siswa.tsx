@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Modal,
   Image,
+  Pressable,
 } from "react-native";
 import {
   SafeAreaView,
@@ -127,6 +128,10 @@ export default function SiswaByCabangPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<PaidRow | null>(null);
 
+  // ✅ dropdown cabang (baru)
+  const [cabangPickerOpen, setCabangPickerOpen] = useState(false);
+  const [cabangPickerSearch, setCabangPickerSearch] = useState("");
+
   function openPreview(item: PaidRow) {
     if (!item.proofDataUrl) return;
     setPreviewItem(item);
@@ -165,7 +170,7 @@ export default function SiswaByCabangPage() {
     return () => unsub();
   }, []);
 
-  // cabangList utk pills (Semua + hasil branches)
+  // cabangList utk filter (Semua + hasil branches)
   const cabangList = useMemo(() => {
     const base = [{ id: "Semua", nama: "Semua" }];
     return base.concat(cabangRows);
@@ -177,6 +182,17 @@ export default function SiswaByCabangPage() {
     cabangRows.forEach((c) => map.set(c.id, c.nama));
     return (id: string) => map.get(id) || "-";
   }, [cabangRows]);
+
+  const cabangLabel = useMemo(() => {
+    if (cabang === "Semua") return "Semua";
+    return cabangNameById(cabang);
+  }, [cabang, cabangNameById]);
+
+  const cabangFiltered = useMemo(() => {
+    const qq = cabangPickerSearch.trim().toLowerCase();
+    if (!qq) return cabangList;
+    return cabangList.filter((x) => x.nama.toLowerCase().includes(qq));
+  }, [cabangList, cabangPickerSearch]);
 
   // ===================== LOAD SISWA (students) =====================
   useEffect(() => {
@@ -253,12 +269,6 @@ export default function SiswaByCabangPage() {
 
     setLoadingHistory(true);
 
-    // ✅ Superadmin tidak dibatasi cabang login; tapi tetap pakai filter cabang sesuai pilihan pill
-    // - kalau pill "Semua": ambil payments by studentId saja
-    // - kalau pilih cabang tertentu: tambahkan where branchId/cabangId
-    //
-    // NOTE: query dengan studentId + orderBy(paidAt) butuh index.
-    // Kita tangkap error index tanpa popup.
     const baseCol = collection(db, "payments");
 
     const qPay =
@@ -316,7 +326,6 @@ export default function SiswaByCabangPage() {
             dibayar: total,
             metode,
 
-            // ✅ FIX image: pakai proofDataUrl (bukan proofUrl)
             proofDataUrl: data.proofDataUrl || null,
             proofType: (data.proofType as any) || null,
           };
@@ -328,7 +337,6 @@ export default function SiswaByCabangPage() {
       (err: any) => {
         console.log("mutasi superadmin error:", err?.code, err?.message);
         setLoadingHistory(false);
-        // ✅ jangan Alert biar gak ganggu (index warning)
       }
     );
 
@@ -344,6 +352,112 @@ export default function SiswaByCabangPage() {
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
+
+      {/* ✅ MODAL DROPDOWN CABANG (tanpa ID) */}
+      <Modal
+        visible={cabangPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCabangPickerOpen(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setCabangPickerOpen(false)}
+        />
+        <View
+          style={[styles.modalSheet, { paddingBottom: insets.bottom + 12 }]}
+        >
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Pilih Cabang</Text>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setCabangPickerOpen(false)}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={18} color="#0F172A" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalSearchWrap}>
+            <Ionicons name="search-outline" size={18} color="#64748B" />
+            <TextInput
+              value={cabangPickerSearch}
+              onChangeText={setCabangPickerSearch}
+              placeholder="Cari cabang..."
+              placeholderTextColor="#94A3B8"
+              style={styles.modalSearchInput}
+              autoCorrect={false}
+            />
+          </View>
+
+          <ScrollView
+            style={{ marginTop: 10, maxHeight: 380 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {loadingCabang ? (
+              <Text style={styles.note}>Memuat cabang...</Text>
+            ) : cabangList.length <= 1 ? (
+              <Text style={[styles.note, { color: "#ef4444" }]}>
+                Belum ada cabang. Tambah cabang dulu.
+              </Text>
+            ) : cabangFiltered.length === 0 ? (
+              <Text style={styles.note}>Cabang tidak ditemukan.</Text>
+            ) : (
+              cabangFiltered.map((c) => {
+                const active = c.id === cabang;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    activeOpacity={0.9}
+                    style={[
+                      styles.pickRow,
+                      active && {
+                        backgroundColor: "#DBEAFE",
+                        borderColor: "#BFDBFE",
+                      },
+                    ]}
+                    onPress={() => {
+                      setCabang(c.id);
+                      setSelected(null);
+                      setHistory([]);
+                      setCabangPickerOpen(false);
+                      setCabangPickerSearch("");
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.pickRowText,
+                        active && { color: "#0F172A" },
+                      ]}
+                    >
+                      {c.nama}
+                    </Text>
+
+                    {active ? (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color="#16A34A"
+                      />
+                    ) : (
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color="#94A3B8"
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+
+          <Text style={[styles.note, { marginTop: 10 }]}>
+            Tip: ketik nama cabang biar cepat.
+          </Text>
+        </View>
+      </Modal>
 
       <ScrollView
         contentContainerStyle={[
@@ -374,32 +488,20 @@ export default function SiswaByCabangPage() {
               Belum ada cabang. Tambah cabang dulu di fitur Tambah Cabang.
             </Text>
           ) : (
-            <View style={styles.pillsRow}>
-              {cabangList.map((c) => {
-                const active = c.id === cabang;
-                return (
-                  <TouchableOpacity
-                    key={c.id}
-                    activeOpacity={0.9}
-                    onPress={() => {
-                      setCabang(c.id);
-                      setSelected(null);
-                      setHistory([]);
-                    }}
-                    style={[
-                      styles.pill,
-                      active ? styles.pillActive : styles.pillNormal,
-                    ]}
-                  >
-                    <Text
-                      style={[styles.pillText, active && { color: "#0F172A" }]}
-                    >
-                      {c.nama}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <>
+              {/* ✅ dropdown cabang (tanpa ID) */}
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.selectBox}
+                onPress={() => setCabangPickerOpen(true)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.selectLabel}>Cabang Terpilih</Text>
+                  <Text style={styles.selectValue}>{cabangLabel}</Text>
+                </View>
+                <Ionicons name="chevron-down" size={18} color="#64748B" />
+              </TouchableOpacity>
+            </>
           )}
 
           <View style={styles.inputWrap}>
@@ -647,7 +749,7 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-// ✅ styles kamu biarkan sama persis + tambah style thumb/preview (tidak mengubah yang lain)
+// ✅ styles kamu biarkan sama persis + tambah style dropdown/modal (tidak mengubah yang lain)
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
 
@@ -695,16 +797,26 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
 
-  pillsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  pill: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
+  // ✅ dropdown select box
+  selectBox: {
+    marginTop: 12,
     borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  pillActive: { backgroundColor: "#DBEAFE", borderColor: "#BFDBFE" },
-  pillNormal: { backgroundColor: "#FFFFFF", borderColor: "#E2E8F0" },
-  pillText: { fontFamily: F.extrabold, color: "#64748B" },
+  selectLabel: {
+    fontFamily: F.semibold,
+    color: "#94A3B8",
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  selectValue: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 14 },
 
   inputWrap: {
     marginTop: 12,
@@ -791,7 +903,6 @@ const styles = StyleSheet.create({
   v: { color: "#0F172A", fontFamily: F.extrabold },
   vStrong: { color: "#0F172A", fontFamily: F.extrabold },
 
-  // ✅ tambahan thumbnail (tidak mengubah style lama)
   thumb: {
     width: 52,
     height: 52,
@@ -834,6 +945,74 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
+  // ✅ modal dropdown
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15,23,42,0.35)",
+  },
+  modalSheet: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    top: 120,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    padding: 14,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 10,
+  },
+  modalTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
+  modalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: "rgba(226,232,240,0.8)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    height: 46,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#0F172A",
+    fontFamily: F.semibold,
+  },
+  pickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 10,
+  },
+  pickRowText: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 14 },
+
   // ✅ preview modal
   previewBackdrop: {
     flex: 1,
@@ -851,7 +1030,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
-  modalTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
+  modalTitle2: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
   xBtn: {
     width: 34,
     height: 34,
@@ -877,4 +1056,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   previewMetaText: { color: "#0F172A", fontFamily: F.bold, lineHeight: 18 },
+
+  // // keep old key used in preview header
+  // modalTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
 });

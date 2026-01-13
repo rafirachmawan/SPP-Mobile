@@ -1,6 +1,6 @@
 // FILE: app/superadmin/admin-cabang.tsx (atau sesuai route kamu)
-// ✅ FULL — hanya ganti typography ke Inter + konsisten THEME, LOGIKA TETAP SAMA.
-// Catatan: aku tidak ubah alur firestore/auth sama sekali.
+// ✅ FULL — hanya ubah UI pemilihan cabang jadi dropdown modal yang lebih bersih.
+// ✅ LOGIKA firestore/auth TETAP SAMA (create admin, toggle aktif, load data, dll tidak diubah).
 
 import React, { useMemo, useState, useEffect } from "react";
 import {
@@ -12,6 +12,8 @@ import {
   TextInput,
   Alert,
   Platform,
+  Modal,
+  Pressable,
 } from "react-native";
 import {
   SafeAreaView,
@@ -94,6 +96,10 @@ export default function AdminCabangPage() {
   const [cabangId, setCabangId] = useState<string>("");
   const [password, setPassword] = useState("");
 
+  // ✅ UI dropdown cabang (Modal)
+  const [showCabangPicker, setShowCabangPicker] = useState(false);
+  const [cabangSearch, setCabangSearch] = useState("");
+
   // ===================== LOAD CABANG =====================
   useEffect(() => {
     const qRef = query(collection(db, "branches"), orderBy("createdAt", "asc"));
@@ -168,6 +174,7 @@ export default function AdminCabangPage() {
     setNama("");
     setUsername("");
     setPassword("");
+    setCabangSearch("");
     if (cabang.length > 0) setCabangId(cabang[0].id);
   }
 
@@ -290,6 +297,12 @@ export default function AdminCabangPage() {
     );
   }
 
+  const cabangFiltered = useMemo(() => {
+    const qq = cabangSearch.trim().toLowerCase();
+    if (!qq) return cabang;
+    return cabang.filter((c) => c.nama.toLowerCase().includes(qq));
+  }, [cabangSearch, cabang]);
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
@@ -298,6 +311,105 @@ export default function AdminCabangPage() {
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
+
+      {/* ✅ Modal Dropdown Cabang */}
+      <Modal
+        visible={showCabangPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCabangPicker(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowCabangPicker(false)}
+        />
+        <View
+          style={[styles.modalSheet, { paddingBottom: insets.bottom + 12 }]}
+        >
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Pilih Cabang</Text>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setShowCabangPicker(false)}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={18} color={THEME.text} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalSearchWrap}>
+            <Ionicons name="search-outline" size={18} color={THEME.sub} />
+            <TextInput
+              value={cabangSearch}
+              onChangeText={setCabangSearch}
+              placeholder="Cari cabang..."
+              placeholderTextColor="#94A3B8"
+              style={styles.modalSearchInput}
+              autoCorrect={false}
+            />
+          </View>
+
+          <ScrollView
+            style={{ marginTop: 10, maxHeight: 380 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {loadingCabang ? (
+              <Text style={styles.loadingText}>Memuat cabang...</Text>
+            ) : cabang.length === 0 ? (
+              <Text style={styles.warnText}>
+                Belum ada cabang. Tambah cabang dulu.
+              </Text>
+            ) : cabangFiltered.length === 0 ? (
+              <Text style={styles.note}>Cabang tidak ditemukan.</Text>
+            ) : (
+              cabangFiltered.map((c) => {
+                const active = cabangId === c.id;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    activeOpacity={0.9}
+                    style={[styles.cabangRow, active && styles.cabangRowActive]}
+                    onPress={() => {
+                      setCabangId(c.id);
+                      setShowCabangPicker(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.cabangRowTitle,
+                          active && { color: THEME.text },
+                        ]}
+                      >
+                        {c.nama}
+                      </Text>
+                    </View>
+
+                    {active ? (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color={THEME.green}
+                      />
+                    ) : (
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color="#94A3B8"
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+
+          <Text style={[styles.note, { marginTop: 10 }]}>
+            Tip: cari nama cabang biar cepat.
+          </Text>
+        </View>
+      </Modal>
 
       <ScrollView
         contentContainerStyle={[
@@ -384,31 +496,26 @@ export default function AdminCabangPage() {
                   Belum ada cabang. Tambah cabang dulu.
                 </Text>
               ) : (
-                <View style={styles.pillsRow}>
-                  {cabang.map((c) => {
-                    const active = cabangId === c.id;
-                    return (
-                      <TouchableOpacity
-                        key={c.id}
-                        activeOpacity={0.9}
-                        onPress={() => setCabangId(c.id)}
-                        style={[
-                          styles.pill,
-                          active ? styles.pillActive : styles.pillNormal,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.pillText,
-                            active && { color: THEME.text },
-                          ]}
-                        >
-                          {c.nama}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <>
+                  {/* ✅ Dropdown bersih (modal) */}
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    style={styles.selectBox}
+                    onPress={() => setShowCabangPicker(true)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.selectLabel}>Cabang Terpilih</Text>
+                      <Text style={styles.selectValue}>
+                        {cabangName(cabangId)}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-down" size={18} color={THEME.sub} />
+                  </TouchableOpacity>
+
+                  <Text style={styles.helper}>
+                    Klik untuk memilih cabang lain.
+                  </Text>
+                </>
               )}
 
               <Text style={[styles.label, { marginTop: 12 }]}>Password</Text>
@@ -636,16 +743,36 @@ const styles = StyleSheet.create({
   },
   input2: { fontSize: 14, color: THEME.text, fontFamily: F.semibold },
 
-  pillsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
-  pill: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
+  // ✅ Dropdown Box (bersih)
+  selectBox: {
+    marginTop: 10,
     borderWidth: 1,
+    borderColor: THEME.border,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  pillActive: { backgroundColor: THEME.blue50, borderColor: THEME.blue200 },
-  pillNormal: { backgroundColor: "#FFFFFF", borderColor: THEME.border },
-  pillText: { fontFamily: F.extrabold, color: THEME.sub },
+  selectLabel: {
+    fontFamily: F.semibold,
+    color: "#94A3B8",
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  selectValue: {
+    fontFamily: F.extrabold,
+    color: THEME.text,
+    fontSize: 14,
+  },
+  helper: {
+    marginTop: 6,
+    color: THEME.sub,
+    fontFamily: F.semibold,
+    fontSize: 12,
+  },
 
   saveBtn: {
     marginTop: 14,
@@ -711,5 +838,90 @@ const styles = StyleSheet.create({
     marginTop: 8,
     color: "#ef4444",
     fontFamily: F.extrabold,
+  },
+
+  // ✅ Modal styles
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15,23,42,0.35)",
+  },
+  modalSheet: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    top: 120,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    padding: 14,
+    shadowColor: THEME.text,
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 10,
+  },
+  modalTitle: {
+    fontFamily: F.extrabold,
+    color: THEME.text,
+    fontSize: 16,
+  },
+  modalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: "rgba(226,232,240,0.8)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    height: 46,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: THEME.text,
+    fontFamily: F.semibold,
+  },
+  cabangRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: THEME.border,
+    backgroundColor: "#FFFFFF",
+    marginBottom: 10,
+  },
+  cabangRowActive: {
+    backgroundColor: THEME.blue50,
+    borderColor: THEME.blue200,
+  },
+  cabangRowTitle: {
+    fontFamily: F.extrabold,
+    color: THEME.text,
+    fontSize: 14,
+  },
+  cabangRowSub: {
+    marginTop: 2,
+    fontFamily: F.semibold,
+    color: "#94A3B8",
+    fontSize: 12,
   },
 });

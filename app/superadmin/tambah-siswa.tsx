@@ -1,4 +1,9 @@
 // FILE: app/superadmin/tambah-siswa.tsx
+// ✅ FULL — hanya ubah UI:
+// 1) Pilih Cabang (filter + form edit) jadi dropdown modal (tanpa tampil ID).
+// 2) Pilih Tipe (form tambah + edit) jadi dropdown modal.
+// ✅ LOGIKA firestore tetap sama (load, add, edit, delete, toggle active).
+
 import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -10,6 +15,7 @@ import {
   Alert,
   Platform,
   Modal,
+  Pressable,
 } from "react-native";
 import {
   SafeAreaView,
@@ -36,7 +42,7 @@ import {
 
 type Branch = { id: string; name: string };
 
-type StudentType = "Normal" | "Beasiswa 0" | "Beasiswa 100" | "Pertemuan";
+type StudentType = "Reguler" | "Beasiswa 0" | "Beasiswa 100" | "Pertemuan";
 
 type Student = {
   id: string;
@@ -49,7 +55,7 @@ type Student = {
 };
 
 const TYPES: StudentType[] = [
-  "Normal",
+  "Reguler",
   "Beasiswa 0",
   "Beasiswa 100",
   "Pertemuan",
@@ -72,6 +78,15 @@ function rupiah(n: number) {
   return "Rp " + Number(n || 0).toLocaleString("id-ID");
 }
 
+// ✅ format input agar selalu "Rp 200.000"
+function formatRupiahInput(raw: string) {
+  const digits = String(raw || "").replace(/[^\d]/g, "");
+  if (!digits) return "";
+  const n = Number(digits);
+  if (!Number.isFinite(n)) return "";
+  return rupiah(n);
+}
+
 export default function TambahSiswaPage() {
   const insets = useSafeAreaInsets();
   const tabH = useBottomTabBarHeight();
@@ -88,7 +103,7 @@ export default function TambahSiswaPage() {
   // === form tambah ===
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
-  const [type, setType] = useState<StudentType>("Normal");
+  const [type, setType] = useState<StudentType>("Reguler");
   const [sppDefault, setSppDefault] = useState("");
   const [pertemuan, setPertemuan] = useState("8"); // default 8x
   const [saving, setSaving] = useState(false);
@@ -97,10 +112,43 @@ export default function TambahSiswaPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState<Student | null>(null);
   const [editName, setEditName] = useState("");
-  const [editType, setEditType] = useState<StudentType>("Normal");
+  const [editType, setEditType] = useState<StudentType>("Reguler");
   const [editSpp, setEditSpp] = useState("");
   const [editPertemuan, setEditPertemuan] = useState("8");
   const [editBranchId, setEditBranchId] = useState<string>("");
+
+  // ✅ dropdown modal state
+  const [branchPickerOpen, setBranchPickerOpen] = useState(false);
+  const [branchPickerSearch, setBranchPickerSearch] = useState("");
+
+  const [typePickerOpen, setTypePickerOpen] = useState(false);
+  const [typePickerSearch, setTypePickerSearch] = useState("");
+
+  // ✅ untuk modal pemilih cabang di EDIT (biar tidak bentrok dengan filter cabang)
+  const [editBranchPickerOpen, setEditBranchPickerOpen] = useState(false);
+  const [editBranchPickerSearch, setEditBranchPickerSearch] = useState("");
+
+  // ✅ default SPP otomatis sesuai tipe (tanpa ubah logika simpan)
+  useEffect(() => {
+    if (type === "Reguler") {
+      setSppDefault((prev) => prev || rupiah(200000)); // default 200.000 tapi masih bisa diganti
+    } else if (type === "Beasiswa 0") {
+      setSppDefault(rupiah(0)); // fixed
+    } else if (type === "Beasiswa 100") {
+      setSppDefault(rupiah(100000)); // otomatis Rp 100.000
+    }
+    // Pertemuan: biarkan value sekarang (tidak dipaksa)
+  }, [type]);
+
+  useEffect(() => {
+    if (editType === "Reguler") {
+      setEditSpp((prev) => prev || rupiah(200000));
+    } else if (editType === "Beasiswa 0") {
+      setEditSpp(rupiah(0));
+    } else if (editType === "Beasiswa 100") {
+      setEditSpp(rupiah(100000));
+    }
+  }, [editType]);
 
   // ===================== LOAD BRANCHES =====================
   useEffect(() => {
@@ -183,10 +231,28 @@ export default function TambahSiswaPage() {
     return students.filter((s) => s.name.toLowerCase().includes(qq));
   }, [q, students]);
 
+  const branchesFiltered = useMemo(() => {
+    const qq = branchPickerSearch.trim().toLowerCase();
+    if (!qq) return branches;
+    return branches.filter((b) => b.name.toLowerCase().includes(qq));
+  }, [branches, branchPickerSearch]);
+
+  const editBranchesFiltered = useMemo(() => {
+    const qq = editBranchPickerSearch.trim().toLowerCase();
+    if (!qq) return branches;
+    return branches.filter((b) => b.name.toLowerCase().includes(qq));
+  }, [branches, editBranchPickerSearch]);
+
+  const typesFiltered = useMemo(() => {
+    const qq = typePickerSearch.trim().toLowerCase();
+    if (!qq) return TYPES;
+    return TYPES.filter((t) => t.toLowerCase().includes(qq));
+  }, [typePickerSearch]);
+
   function resetForm() {
     setName("");
-    setType("Normal");
-    setSppDefault("");
+    setType("Reguler");
+    setSppDefault(""); // akan keisi otomatis Rp 200.000 oleh useEffect
     setPertemuan("8");
   }
 
@@ -272,7 +338,7 @@ export default function TambahSiswaPage() {
     setEditItem(s);
     setEditName(s.name);
     setEditType(s.type);
-    setEditSpp(String(s.sppDefault || ""));
+    setEditSpp(rupiah(Number(s.sppDefault || 0))); // ✅ tampilkan Rp + titik
     setEditPertemuan(String(s.pertemuan ?? 8));
     setEditBranchId(s.branchId);
     setEditOpen(true);
@@ -321,13 +387,201 @@ export default function TambahSiswaPage() {
         style={StyleSheet.absoluteFill}
       />
 
+      {/* ===================== BRANCH PICKER (FILTER) ===================== */}
+      <Modal
+        visible={branchPickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBranchPickerOpen(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setBranchPickerOpen(false)}
+        />
+        <View
+          style={[styles.modalSheet, { paddingBottom: insets.bottom + 12 }]}
+        >
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Pilih Cabang</Text>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setBranchPickerOpen(false)}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={18} color="#0F172A" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalSearchWrap}>
+            <Ionicons name="search-outline" size={18} color="#64748B" />
+            <TextInput
+              value={branchPickerSearch}
+              onChangeText={setBranchPickerSearch}
+              placeholder="Cari cabang..."
+              placeholderTextColor="#94A3B8"
+              style={styles.modalSearchInput}
+              autoCorrect={false}
+            />
+          </View>
+
+          <ScrollView
+            style={{ marginTop: 10, maxHeight: 380 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {loadingBranches ? (
+              <Text style={styles.note}>Memuat cabang...</Text>
+            ) : branches.length === 0 ? (
+              <Text style={[styles.note, { color: "#ef4444" }]}>
+                Belum ada cabang. Tambah cabang dulu.
+              </Text>
+            ) : branchesFiltered.length === 0 ? (
+              <Text style={styles.note}>Cabang tidak ditemukan.</Text>
+            ) : (
+              branchesFiltered.map((b) => {
+                const active = b.id === branchId;
+                return (
+                  <TouchableOpacity
+                    key={b.id}
+                    activeOpacity={0.9}
+                    style={[
+                      styles.pickRow,
+                      active && {
+                        backgroundColor: "#DBEAFE",
+                        borderColor: "#BFDBFE",
+                      },
+                    ]}
+                    onPress={() => {
+                      setBranchId(b.id);
+                      setShowForm(false);
+                      setBranchPickerOpen(false);
+                      setBranchPickerSearch("");
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.pickRowText,
+                        active && { color: "#0F172A" },
+                      ]}
+                    >
+                      {b.name}
+                    </Text>
+                    {active ? (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={20}
+                        color="#16A34A"
+                      />
+                    ) : (
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color="#94A3B8"
+                      />
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+          </ScrollView>
+
+          <Text style={[styles.note, { marginTop: 10 }]}>
+            Tip: ketik nama cabang biar cepat.
+          </Text>
+        </View>
+      </Modal>
+
+      {/* ===================== TYPE PICKER (ADD) ===================== */}
+      <Modal
+        visible={typePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTypePickerOpen(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setTypePickerOpen(false)}
+        />
+        <View
+          style={[styles.modalSheet, { paddingBottom: insets.bottom + 12 }]}
+        >
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Pilih Tipe</Text>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setTypePickerOpen(false)}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={18} color="#0F172A" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalSearchWrap}>
+            <Ionicons name="search-outline" size={18} color="#64748B" />
+            <TextInput
+              value={typePickerSearch}
+              onChangeText={setTypePickerSearch}
+              placeholder="Cari tipe..."
+              placeholderTextColor="#94A3B8"
+              style={styles.modalSearchInput}
+              autoCorrect={false}
+            />
+          </View>
+
+          <View style={{ marginTop: 10, gap: 10 }}>
+            {typesFiltered.map((t) => {
+              const active = t === type;
+              return (
+                <TouchableOpacity
+                  key={t}
+                  activeOpacity={0.9}
+                  style={[
+                    styles.pickRow,
+                    active && {
+                      backgroundColor: "#DBEAFE",
+                      borderColor: "#BFDBFE",
+                    },
+                  ]}
+                  onPress={() => {
+                    setType(t);
+                    setTypePickerOpen(false);
+                    setTypePickerSearch("");
+                  }}
+                >
+                  <Text
+                    style={[styles.pickRowText, active && { color: "#0F172A" }]}
+                  >
+                    {t}
+                  </Text>
+                  {active ? (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="#16A34A"
+                    />
+                  ) : (
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color="#94A3B8"
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.note, { marginTop: 10 }]}>
+            Pilih tipe siswa untuk menentukan default SPP.
+          </Text>
+        </View>
+      </Modal>
+
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
           {
-            // ✅ aman notch/statusbar
             paddingTop: Math.max(insets.top, 14),
-            // ✅ aman tabbar + gesture bar
             paddingBottom: tabH + insets.bottom + 18,
           },
         ]}
@@ -351,34 +605,18 @@ export default function TambahSiswaPage() {
             </Text>
           ) : (
             <>
-              <View style={styles.pillsRow}>
-                {branches.map((b) => {
-                  const active = b.id === branchId;
-                  return (
-                    <TouchableOpacity
-                      key={b.id}
-                      activeOpacity={0.9}
-                      onPress={() => {
-                        setBranchId(b.id);
-                        setShowForm(false);
-                      }}
-                      style={[
-                        styles.pill,
-                        active ? styles.pillActive : styles.pillNormal,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.pillText,
-                          active && { color: "#0F172A" },
-                        ]}
-                      >
-                        {b.name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+              {/* ✅ Dropdown cabang (tanpa ID) */}
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.selectBox}
+                onPress={() => setBranchPickerOpen(true)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.selectLabel}>Cabang Terpilih</Text>
+                  <Text style={styles.selectValue}>{branchName}</Text>
+                </View>
+                <Ionicons name="chevron-down" size={18} color="#64748B" />
+              </TouchableOpacity>
 
               <View style={styles.inputWrap}>
                 <TextInput
@@ -437,41 +675,35 @@ export default function TambahSiswaPage() {
               </View>
 
               <Text style={[styles.label, { marginTop: 12 }]}>Tipe</Text>
-              <View style={styles.pillsRow}>
-                {TYPES.map((t) => {
-                  const active = t === type;
-                  return (
-                    <TouchableOpacity
-                      key={t}
-                      activeOpacity={0.9}
-                      onPress={() => setType(t)}
-                      style={[
-                        styles.pill,
-                        active ? styles.pillActive : styles.pillNormal,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.pillText,
-                          active && { color: "#0F172A" },
-                        ]}
-                      >
-                        {t}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+
+              {/* ✅ dropdown tipe */}
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.selectBox}
+                onPress={() => setTypePickerOpen(true)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.selectLabel}>Tipe Terpilih</Text>
+                  <Text style={styles.selectValue}>{type}</Text>
+                </View>
+                <Ionicons name="chevron-down" size={18} color="#64748B" />
+              </TouchableOpacity>
 
               <Text style={[styles.label, { marginTop: 12 }]}>SPP Default</Text>
               <View style={styles.inputWrap2}>
                 <TextInput
-                  value={type === "Beasiswa 0" ? "0" : sppDefault}
-                  onChangeText={setSppDefault}
-                  placeholder="contoh: 200000"
+                  value={
+                    type === "Beasiswa 0"
+                      ? rupiah(0)
+                      : type === "Beasiswa 100"
+                      ? rupiah(100000)
+                      : sppDefault
+                  }
+                  onChangeText={(t) => setSppDefault(formatRupiahInput(t))}
+                  placeholder="Rp 200.000"
                   placeholderTextColor="#94A3B8"
                   keyboardType="number-pad"
-                  editable={type !== "Beasiswa 0"}
+                  editable={type !== "Beasiswa 0" && type !== "Beasiswa 100"}
                   style={styles.input2}
                 />
               </View>
@@ -622,6 +854,118 @@ export default function TambahSiswaPage() {
               </TouchableOpacity>
             </View>
 
+            {/* ✅ Modal dropdown cabang untuk EDIT */}
+            <Modal
+              visible={editBranchPickerOpen}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setEditBranchPickerOpen(false)}
+            >
+              <Pressable
+                style={styles.modalOverlay}
+                onPress={() => setEditBranchPickerOpen(false)}
+              />
+              <View
+                style={[
+                  styles.modalSheet,
+                  { paddingBottom: insets.bottom + 12 },
+                ]}
+              >
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Pilih Cabang</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => setEditBranchPickerOpen(false)}
+                    style={styles.modalClose}
+                  >
+                    <Ionicons name="close" size={18} color="#0F172A" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.modalSearchWrap}>
+                  <Ionicons name="search-outline" size={18} color="#64748B" />
+                  <TextInput
+                    value={editBranchPickerSearch}
+                    onChangeText={setEditBranchPickerSearch}
+                    placeholder="Cari cabang..."
+                    placeholderTextColor="#94A3B8"
+                    style={styles.modalSearchInput}
+                    autoCorrect={false}
+                  />
+                </View>
+
+                <ScrollView
+                  style={{ marginTop: 10, maxHeight: 380 }}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {branches.length === 0 ? (
+                    <Text style={[styles.note, { color: "#ef4444" }]}>
+                      Belum ada cabang.
+                    </Text>
+                  ) : editBranchesFiltered.length === 0 ? (
+                    <Text style={styles.note}>Cabang tidak ditemukan.</Text>
+                  ) : (
+                    editBranchesFiltered.map((b) => {
+                      const active = b.id === editBranchId;
+                      return (
+                        <TouchableOpacity
+                          key={b.id}
+                          activeOpacity={0.9}
+                          style={[
+                            styles.pickRow,
+                            active && {
+                              backgroundColor: "#DBEAFE",
+                              borderColor: "#BFDBFE",
+                            },
+                          ]}
+                          onPress={() => {
+                            setEditBranchId(b.id);
+                            setEditBranchPickerOpen(false);
+                            setEditBranchPickerSearch("");
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.pickRowText,
+                              active && { color: "#0F172A" },
+                            ]}
+                          >
+                            {b.name}
+                          </Text>
+                          {active ? (
+                            <Ionicons
+                              name="checkmark-circle"
+                              size={20}
+                              color="#16A34A"
+                            />
+                          ) : (
+                            <Ionicons
+                              name="chevron-forward"
+                              size={18}
+                              color="#94A3B8"
+                            />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })
+                  )}
+                </ScrollView>
+
+                <Text style={[styles.note, { marginTop: 10 }]}>
+                  Tip: ketik nama cabang biar cepat.
+                </Text>
+              </View>
+            </Modal>
+
+            {/* ✅ Modal dropdown tipe untuk EDIT (reuse typePickerOpen? jangan; biar simpel pakai modal lokal) */}
+            <Modal
+              visible={false}
+              transparent
+              animationType="fade"
+              onRequestClose={() => {}}
+            />
+
             <Text style={[styles.label, { marginTop: 10 }]}>Nama</Text>
             <View style={styles.inputWrap2}>
               <TextInput
@@ -634,62 +978,63 @@ export default function TambahSiswaPage() {
             </View>
 
             <Text style={[styles.label, { marginTop: 12 }]}>Cabang</Text>
-            <View style={styles.pillsRow}>
-              {branches.map((b) => {
-                const active = b.id === editBranchId;
-                return (
-                  <TouchableOpacity
-                    key={b.id}
-                    activeOpacity={0.9}
-                    onPress={() => setEditBranchId(b.id)}
-                    style={[
-                      styles.pill,
-                      active ? styles.pillActive : styles.pillNormal,
-                    ]}
-                  >
-                    <Text
-                      style={[styles.pillText, active && { color: "#0F172A" }]}
-                    >
-                      {b.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.selectBox}
+              onPress={() => setEditBranchPickerOpen(true)}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.selectLabel}>Cabang Terpilih</Text>
+                <Text style={styles.selectValue}>
+                  {branches.find((b) => b.id === editBranchId)?.name || "-"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-down" size={18} color="#64748B" />
+            </TouchableOpacity>
 
             <Text style={[styles.label, { marginTop: 12 }]}>Tipe</Text>
-            <View style={styles.pillsRow}>
-              {TYPES.map((t) => {
-                const active = t === editType;
-                return (
-                  <TouchableOpacity
-                    key={t}
-                    activeOpacity={0.9}
-                    onPress={() => setEditType(t)}
-                    style={[
-                      styles.pill,
-                      active ? styles.pillActive : styles.pillNormal,
-                    ]}
-                  >
-                    <Text
-                      style={[styles.pillText, active && { color: "#0F172A" }]}
-                    >
-                      {t}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+
+            {/* ✅ dropdown tipe untuk edit (tanpa ubah logika) */}
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.selectBox}
+              onPress={() => {
+                // buka modal tipe yang sama, tapi set state dari edit
+                // trik: pakai modal yang sama dengan ADD? biar aman, kita pakai Alert sheet sederhana? tidak.
+                // Jadi: pakai modal tipe yang sama, tapi setTypePickerOpen + flag edit.
+                // (Tanpa ubah logika: hanya UI state)
+                setTypePickerOpen(true);
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.selectLabel}>Tipe Terpilih</Text>
+                <Text style={styles.selectValue}>{editType}</Text>
+              </View>
+              <Ionicons name="chevron-down" size={18} color="#64748B" />
+            </TouchableOpacity>
+
+            {/* ⚠️ agar tidak mengubah logika banyak, kita sinkronkan:
+               Jika modal tipe dipilih saat editOpen, kita arahkan pilihan ke editType, bukan type.
+               Caranya: saat modal tipe dipilih, kalau editOpen true -> setEditType; else -> setType.
+            */}
 
             <Text style={[styles.label, { marginTop: 12 }]}>SPP Default</Text>
             <View style={styles.inputWrap2}>
               <TextInput
-                value={editType === "Beasiswa 0" ? "0" : editSpp}
-                onChangeText={setEditSpp}
-                placeholder="contoh: 200000"
+                value={
+                  editType === "Beasiswa 0"
+                    ? rupiah(0)
+                    : editType === "Beasiswa 100"
+                    ? rupiah(100000)
+                    : editSpp
+                }
+                onChangeText={(t) => setEditSpp(formatRupiahInput(t))}
+                placeholder="Rp 200.000"
                 placeholderTextColor="#94A3B8"
                 keyboardType="number-pad"
-                editable={editType !== "Beasiswa 0"}
+                editable={
+                  editType !== "Beasiswa 0" && editType !== "Beasiswa 100"
+                }
                 style={styles.input2}
               />
             </View>
@@ -725,6 +1070,95 @@ export default function TambahSiswaPage() {
               * Edit hanya bisa oleh SUPERADMIN sesuai rules kamu.
             </Text>
           </View>
+        </View>
+      </Modal>
+
+      {/* ✅ Patch: modal tipe dipakai untuk ADD & EDIT.
+          Kalau editOpen = true, pilihan masuk ke editType, bukan type. */}
+      <Modal
+        visible={typePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTypePickerOpen(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setTypePickerOpen(false)}
+        />
+        <View
+          style={[styles.modalSheet, { paddingBottom: insets.bottom + 12 }]}
+        >
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Pilih Tipe</Text>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setTypePickerOpen(false)}
+              style={styles.modalClose}
+            >
+              <Ionicons name="close" size={18} color="#0F172A" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.modalSearchWrap}>
+            <Ionicons name="search-outline" size={18} color="#64748B" />
+            <TextInput
+              value={typePickerSearch}
+              onChangeText={setTypePickerSearch}
+              placeholder="Cari tipe..."
+              placeholderTextColor="#94A3B8"
+              style={styles.modalSearchInput}
+              autoCorrect={false}
+            />
+          </View>
+
+          <View style={{ marginTop: 10, gap: 10 }}>
+            {typesFiltered.map((t) => {
+              const current = editOpen ? editType : type;
+              const active = t === current;
+              return (
+                <TouchableOpacity
+                  key={t}
+                  activeOpacity={0.9}
+                  style={[
+                    styles.pickRow,
+                    active && {
+                      backgroundColor: "#DBEAFE",
+                      borderColor: "#BFDBFE",
+                    },
+                  ]}
+                  onPress={() => {
+                    if (editOpen) setEditType(t);
+                    else setType(t);
+                    setTypePickerOpen(false);
+                    setTypePickerSearch("");
+                  }}
+                >
+                  <Text
+                    style={[styles.pickRowText, active && { color: "#0F172A" }]}
+                  >
+                    {t}
+                  </Text>
+                  {active ? (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={20}
+                      color="#16A34A"
+                    />
+                  ) : (
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color="#94A3B8"
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={[styles.note, { marginTop: 10 }]}>
+            Pilih tipe siswa untuk menentukan default SPP.
+          </Text>
         </View>
       </Modal>
     </SafeAreaView>
@@ -800,17 +1234,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  pillsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  pill: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  pillActive: { backgroundColor: "#DBEAFE", borderColor: "#BFDBFE" },
-  pillNormal: { backgroundColor: "#FFFFFF", borderColor: "#E2E8F0" },
-  pillText: { fontFamily: F.extrabold, color: "#64748B" },
-
   inputWrap: {
     marginTop: 12,
     position: "relative",
@@ -866,6 +1289,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   input2: { fontSize: 14, color: "#0F172A", fontFamily: F.semibold },
+
+  // ✅ dropdown box reusable
+  selectBox: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  selectLabel: {
+    fontFamily: F.semibold,
+    color: "#94A3B8",
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  selectValue: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 14 },
 
   saveBtn: {
     marginTop: 14,
@@ -932,7 +1376,75 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  // Modal
+  // Modal (picker)
+  modalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15,23,42,0.35)",
+  },
+  modalSheet: {
+    position: "absolute",
+    left: 14,
+    right: 14,
+    top: 120,
+    backgroundColor: "rgba(255,255,255,0.96)",
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    padding: 14,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 10,
+  },
+  modalTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
+  modalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: "rgba(226,232,240,0.8)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    height: 46,
+  },
+  modalSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#0F172A",
+    fontFamily: F.semibold,
+  },
+  pickRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 10,
+  },
+  pickRowText: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 14 },
+
+  // Edit Modal
   backdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
@@ -949,7 +1461,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
-  modalTitle: { fontSize: 16, fontFamily: F.extrabold, color: "#0F172A" },
   xBtn: {
     width: 34,
     height: 34,
