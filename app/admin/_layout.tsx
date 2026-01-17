@@ -1,8 +1,9 @@
-import React from "react";
-import { Tabs } from "expo-router";
+// FILE: app/admin/_layout.tsx
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Tabs } from "expo-router";
+import React from "react";
 import { Platform } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const THEME = {
   primary: "#0EA5E9",
@@ -15,28 +16,24 @@ export default function AdminLayout() {
 
   return (
     <Tabs
-      initialRouteName="index"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: THEME.primary,
         tabBarInactiveTintColor: THEME.muted,
-
-        // ✅ aman di Android gesture/home bar + iOS
         tabBarStyle: {
           borderTopColor: THEME.border,
           height: 62 + insets.bottom,
           paddingTop: 8,
           paddingBottom: 10 + insets.bottom,
         },
-
-        // ✅ samakan rasa font (lebih mirip style screen lain)
         tabBarLabelStyle: {
           fontWeight: Platform.OS === "ios" ? "800" : "900",
           fontSize: 11,
         },
       }}
     >
-      {/* 1) Dashboard */}
+      {/* ================= TAB YANG DITAMPILKAN ================= */}
+
       <Tabs.Screen
         name="index"
         options={{
@@ -47,40 +44,16 @@ export default function AdminLayout() {
         }}
       />
 
-      {/* 2) Bayar SPP */}
       <Tabs.Screen
-        name="bayar"
+        name="menu"
         options={{
-          title: "Bayar SPP",
+          title: "Admin",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cash-outline" size={size} color={color} />
+            <Ionicons name="apps-outline" size={size} color={color} />
           ),
         }}
       />
 
-      {/* 3) Siswa */}
-      <Tabs.Screen
-        name="siswa"
-        options={{
-          title: "Siswa",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      {/* 4) Riwayat */}
-      <Tabs.Screen
-        name="riwayat"
-        options={{
-          title: "Riwayat",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="time-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      {/* 5) Akun (paling kanan) */}
       <Tabs.Screen
         name="akun"
         options={{
@@ -90,6 +63,13 @@ export default function AdminLayout() {
           ),
         }}
       />
+
+      {/* ================= TAB DISEMBUNYIKAN ================= */}
+
+      <Tabs.Screen name="bayar" options={{ href: null }} />
+      <Tabs.Screen name="siswa" options={{ href: null }} />
+      <Tabs.Screen name="riwayat" options={{ href: null }} />
+      <Tabs.Screen name="kelola-siswa" options={{ href: null }} />
     </Tabs>
   );
 }

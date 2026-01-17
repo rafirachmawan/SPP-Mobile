@@ -1,21 +1,20 @@
 // FILE: app/admin/index.tsx
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ✅ Firebase
-import { db, auth } from "../../firebase";
 import {
   collection,
   doc,
@@ -24,6 +23,7 @@ import {
   query,
   where,
 } from "firebase/firestore";
+import { auth, db } from "../../firebase";
 
 const F = {
   regular: "Inter_400Regular",
@@ -106,7 +106,7 @@ export default function AdminDashboard() {
     if (!branchId) return;
     const qRef = query(
       collection(db, "students"),
-      where("branchId", "==", branchId)
+      where("branchId", "==", branchId),
     );
     const unsub = onSnapshot(qRef, (snap) => setTotalSiswa(snap.size));
     return () => unsub();
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
       collection(db, "invoices"),
       where("branchId", "==", branchId),
       where("monthKey", "==", mkNow),
-      where("status", "==", "PAID")
+      where("status", "==", "PAID"),
     );
 
     const unsub = onSnapshot(qInv, (snap) => {
@@ -155,7 +155,7 @@ export default function AdminDashboard() {
         icon: "cash-outline",
       },
     ],
-    [totalSiswa, sudahBayarBulanIni, nominalMasukBulanIni]
+    [totalSiswa, sudahBayarBulanIni, nominalMasukBulanIni],
   );
 
   const actions = [
@@ -166,8 +166,14 @@ export default function AdminDashboard() {
       to: "/admin/bayar",
     },
     {
-      title: "Siswa",
-      desc: "Daftar siswa cabang.",
+      title: "Kelola Siswa",
+      desc: "Tambah & hapus siswa cabang.",
+      icon: "person-add-outline",
+      to: "/admin/kelola-siswa",
+    },
+    {
+      title: "Mutasi Siswa",
+      desc: "Riwayat pembayaran per siswa.",
       icon: "people-outline",
       to: "/admin/siswa",
     },

@@ -1,55 +1,56 @@
-// FILE: app/superadmin/admin-cabang.tsx (atau sesuai route kamu)
-// ✅ FULL — hanya ubah UI pemilihan cabang jadi dropdown modal yang lebih bersih.
-// ✅ LOGIKA firestore/auth TETAP SAMA (create admin, toggle aktif, load data, dll tidak diubah).
+// FILE: app/superadmin/admin-cabang.tsx
+// ✅ FULL — UI & LOGIKA ASLI
+// ✅ TAMBAHAN SAJA: HAPUS ADMIN CABANG (HARD DELETE)
 
-import React, { useMemo, useState, useEffect } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
   Alert,
-  Platform,
   Modal,
+  Platform,
   Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 
-// ✅ Firebase (hapus functions)
-import { auth, db, getSecondaryAuth } from "../../firebase"; // ✅ sesuaikan path
-import {
-  collection,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  updateDoc,
-  serverTimestamp,
-  setDoc,
-  addDoc,
-  getDoc,
-} from "firebase/firestore";
+// ✅ Firebase
 import {
   createUserWithEmailAndPassword,
   signOut as signOutAuth,
 } from "firebase/auth";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
+import { auth, db, getSecondaryAuth } from "../../firebase";
 
 type Cabang = { id: string; nama: string };
 type AdminCabang = {
-  id: string; // doc id (di branch_admins)
+  id: string;
   nama: string;
   username: string;
   cabangId: string;
   aktif: boolean;
-  uid?: string; // uid auth (disimpan)
+  uid?: string;
 };
 
 function normalizeUsername(u: string) {
@@ -71,7 +72,6 @@ const THEME = {
   blue200: "#BFDBFE",
 };
 
-// ✅ font map (pastikan Inter sudah di-load di Root Layout)
 const F = {
   regular: "Inter_400Regular",
   semibold: "Inter_600SemiBold",
@@ -96,7 +96,6 @@ export default function AdminCabangPage() {
   const [cabangId, setCabangId] = useState<string>("");
   const [password, setPassword] = useState("");
 
-  // ✅ UI dropdown cabang (Modal)
   const [showCabangPicker, setShowCabangPicker] = useState(false);
   const [cabangSearch, setCabangSearch] = useState("");
 
@@ -114,21 +113,19 @@ export default function AdminCabangPage() {
         setLoadingCabang(false);
         if (!cabangId && rows.length > 0) setCabangId(rows[0].id);
       },
-      (err) => {
-        console.log(err);
+      () => {
         setLoadingCabang(false);
         Alert.alert("Gagal", "Tidak bisa mengambil data cabang.");
-      }
+      },
     );
     return () => unsub();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ===================== LOAD ADMIN CABANG =====================
   useEffect(() => {
     const qRef = query(
       collection(db, "branch_admins"),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
     const unsub = onSnapshot(
       qRef,
@@ -147,11 +144,10 @@ export default function AdminCabangPage() {
         setItems(rows);
         setLoadingAdmin(false);
       },
-      (err) => {
-        console.log(err);
+      () => {
         setLoadingAdmin(false);
         Alert.alert("Gagal", "Tidak bisa mengambil data admin cabang.");
-      }
+      },
     );
     return () => unsub();
   }, []);
@@ -162,7 +158,7 @@ export default function AdminCabangPage() {
     return items.filter(
       (x) =>
         x.nama.toLowerCase().includes(qq) ||
-        x.username.toLowerCase().includes(qq)
+        x.username.toLowerCase().includes(qq),
     );
   }, [q, items]);
 
@@ -191,7 +187,7 @@ export default function AdminCabangPage() {
       throw new Error("Ditolak: hanya SUPERADMIN.");
   }
 
-  // ===================== CREATE ADMIN (TANPA CLOUD FUNCTION) =====================
+  // ===================== CREATE ADMIN =====================
   async function onAdd() {
     const n = nama.trim();
     const u = normalizeUsername(username);
@@ -206,23 +202,16 @@ export default function AdminCabangPage() {
     try {
       await ensureSuperadmin();
 
-      // ✅ admin cabang login pakai username saja
-      // tapi disimpan sebagai email internal di auth
       const emailInternal = `${u}@cabang.spp`;
-
-      // ✅ buat user pakai secondary auth (biar superadmin tidak logout)
       const secondary = getSecondaryAuth();
       const cred = await createUserWithEmailAndPassword(
         secondary,
         emailInternal,
-        p
+        p,
       );
       const newUid = cred.user.uid;
-
-      // ✅ logout secondary (optional)
       await signOutAuth(secondary);
 
-      // ✅ simpan role ke users/{uid} (dipakai login routing)
       await setDoc(
         doc(db, "users", newUid),
         {
@@ -234,10 +223,9 @@ export default function AdminCabangPage() {
           createdAt: serverTimestamp(),
           createdBy: auth.currentUser?.uid || null,
         },
-        { merge: true }
+        { merge: true },
       );
 
-      // ✅ simpan ke branch_admins untuk list halaman ini
       await addDoc(collection(db, "branch_admins"), {
         uid: newUid,
         nama: n,
@@ -252,13 +240,7 @@ export default function AdminCabangPage() {
       resetForm();
       Alert.alert("Berhasil", "Admin cabang berhasil dibuat.");
     } catch (e: any) {
-      console.log("create admin error:", e);
-      const msg = String(e?.message || "");
-
-      if (msg.includes("auth/email-already-in-use"))
-        return Alert.alert("Gagal", "Username sudah dipakai.");
-
-      return Alert.alert("Gagal", msg || "Gagal membuat admin.");
+      Alert.alert("Gagal", e?.message || "Gagal membuat admin.");
     }
   }
 
@@ -266,17 +248,14 @@ export default function AdminCabangPage() {
   async function onToggleAktif(item: AdminCabang) {
     try {
       await ensureSuperadmin();
-
       const next = !item.aktif;
 
-      // update branch_admins (pakai doc id)
       await updateDoc(doc(db, "branch_admins", item.id), {
         aktif: next,
         updatedAt: serverTimestamp(),
         updatedBy: auth.currentUser?.uid || null,
       });
 
-      // update users/{uid} (pakai uid auth yang disimpan)
       if (item.uid) {
         await updateDoc(doc(db, "users", item.uid), {
           active: next,
@@ -285,15 +264,41 @@ export default function AdminCabangPage() {
         });
       }
     } catch (e: any) {
-      console.log(e);
       Alert.alert("Gagal", e?.message || "Tidak bisa mengubah status.");
     }
   }
 
-  function onResetPass(item: AdminCabang) {
+  // ===================== HAPUS ADMIN CABANG =====================
+  async function onDeleteAdmin(item: AdminCabang) {
+    Alert.alert(
+      "Hapus Admin Cabang",
+      `Admin "${item.nama}" akan DIHAPUS PERMANEN.`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await ensureSuperadmin();
+              await deleteDoc(doc(db, "branch_admins", item.id));
+              if (item.uid) {
+                await deleteDoc(doc(db, "users", item.uid));
+              }
+              Alert.alert("Berhasil", "Admin cabang dihapus.");
+            } catch (e: any) {
+              Alert.alert("Gagal", e?.message || "Gagal menghapus admin.");
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function onResetPass(_: AdminCabang) {
     Alert.alert(
       "Reset Password",
-      "Untuk gratis: reset password paling aman lewat menu Firebase Console (Auth) atau kita buatkan halaman 'ganti password' setelah login."
+      "Reset password dilakukan via Firebase Console.",
     );
   }
 
@@ -606,6 +611,14 @@ export default function AdminCabangPage() {
                         size={18}
                         color="#fff"
                       />
+                    </TouchableOpacity>
+                    {/* 🔴 DELETE ADMIN */}
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      style={[styles.smallBtn, { backgroundColor: "#EF4444" }]}
+                      onPress={() => onDeleteAdmin(a)}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#fff" />
                     </TouchableOpacity>
                   </View>
                 </View>

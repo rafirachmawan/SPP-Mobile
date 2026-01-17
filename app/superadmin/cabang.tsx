@@ -1,31 +1,31 @@
-// FILE: app/superadmin/unit.tsx  (atau tetap app/superadmin/cabang.tsx kalau route tidak mau diubah)
-// ✅ FULL — semua teks/label "cabang" diganti jadi "unit" TANPA mengubah logika.
-// ✅ Firestore collection tetap "branches" (biar data & rules tidak berubah)
+// FILE: app/superadmin/unit.tsx
+// ✅ FULL — UI & LOGIKA ASLI
+// ✅ TAMBAHAN: HARD DELETE UNIT (PERMANEN)
 
-import React, { useMemo, useState, useEffect } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
   Alert,
   Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 
 // ✅ Firebase
-import { auth, db } from "../../firebase"; // ✅ sesuaikan bila lokasi file berbeda
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -33,9 +33,10 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
+import { auth, db } from "../../firebase";
 
 type Unit = {
-  id: string; // doc id firestore
+  id: string;
   nama: string;
   alamat?: string;
   aktif: boolean;
@@ -54,7 +55,6 @@ const THEME = {
   orange: "#F97316",
 };
 
-// ✅ font map (pastikan Inter sudah di-load di Root Layout)
 const F = {
   regular: "Inter_400Regular",
   semibold: "Inter_600SemiBold",
@@ -75,7 +75,6 @@ export default function UnitPage() {
   const [nama, setNama] = useState("");
   const [alamat, setAlamat] = useState("");
 
-  // ✅ mode edit
   const [editId, setEditId] = useState<string | null>(null);
 
   // ===================== LOAD REALTIME FROM FIRESTORE =====================
@@ -142,7 +141,6 @@ export default function UnitPage() {
       const uid = auth.currentUser?.uid;
       if (!uid) return Alert.alert("Gagal", "Belum login.");
 
-      // ✅ EDIT
       if (editId) {
         await updateDoc(doc(db, "branches", editId), {
           name: n,
@@ -153,7 +151,6 @@ export default function UnitPage() {
 
         Alert.alert("Berhasil", "Unit berhasil diupdate.");
       } else {
-        // ✅ ADD
         await addDoc(collection(db, "branches"), {
           name: n,
           address: a || "-",
@@ -187,6 +184,33 @@ export default function UnitPage() {
     }
   }
 
+  // ===================== HARD DELETE =====================
+  function onDelete(item: Unit) {
+    Alert.alert(
+      "Hapus Unit",
+      `Unit "${item.nama}" akan DIHAPUS PERMANEN.\n\nTindakan ini tidak bisa dibatalkan.`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus Permanen",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, "branches", item.id));
+              Alert.alert("Berhasil", "Unit berhasil dihapus permanen.");
+            } catch (e: any) {
+              console.log("delete error:", e);
+              Alert.alert(
+                "Gagal",
+                e?.message || "Tidak bisa menghapus unit."
+              );
+            }
+          },
+        },
+      ]
+    );
+  }
+
   function onEdit(item: Unit) {
     setEditId(item.id);
     setNama(item.nama);
@@ -212,9 +236,7 @@ export default function UnitPage() {
         contentContainerStyle={[
           styles.scroll,
           {
-            // ✅ atas aman dari status bar / notch
             paddingTop: Math.max(insets.top, 14),
-            // ✅ bawah aman dari tab bar + gesture bar android
             paddingBottom: tabH + insets.bottom + 18,
           },
         ]}
@@ -223,7 +245,7 @@ export default function UnitPage() {
       >
         <Header title="Unit" subtitle="Tambah & kelola unit." />
 
-        {/* Search + Add */}
+        {/* ===================== SEARCH + ADD ===================== */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Cari Unit</Text>
 
@@ -321,7 +343,7 @@ export default function UnitPage() {
           )}
         </View>
 
-        {/* List */}
+        {/* ===================== LIST ===================== */}
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>Daftar Unit</Text>
@@ -344,9 +366,7 @@ export default function UnitPage() {
                     <Text style={styles.itemTitle}>{c.nama}</Text>
                     <Text style={styles.itemSub}>{c.alamat || "-"}</Text>
 
-                    <View
-                      style={{ flexDirection: "row", gap: 8, marginTop: 10 }}
-                    >
+                    <View style={{ flexDirection: "row", marginTop: 10 }}>
                       <View
                         style={[
                           styles.pill,
@@ -386,6 +406,15 @@ export default function UnitPage() {
                         size={18}
                         color="#fff"
                       />
+                    </TouchableOpacity>
+
+                    {/* 🔴 DELETE */}
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      style={[styles.smallBtn, { backgroundColor: "#EF4444" }]}
+                      onPress={() => onDelete(c)}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#fff" />
                     </TouchableOpacity>
                   </View>
                 </View>
