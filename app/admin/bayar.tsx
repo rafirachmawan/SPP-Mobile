@@ -1,20 +1,20 @@
 // FILE: app/admin/bayar.tsx
-import React, { useMemo, useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Modal,
-  Alert,
-  ActivityIndicator,
-  Platform,
-  Image,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 // ✅ Safe Area
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,11 +23,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 
 // ✅ Compress/Resize + Base64
-import * as ImageManipulator from "expo-image-manipulator";
 import * as FileSystem from "expo-file-system/legacy";
+import * as ImageManipulator from "expo-image-manipulator";
 
 // ✅ Firebase
-import { db, auth } from "../../firebase";
 import {
   collection,
   doc,
@@ -35,10 +34,11 @@ import {
   onSnapshot,
   orderBy,
   query,
-  where,
   runTransaction,
   serverTimestamp,
+  where,
 } from "firebase/firestore";
+import { auth, db } from "../../firebase";
 
 const THEME = {
   bg1: "#BFE9FF",
@@ -64,6 +64,7 @@ type Hadiah = { id: string; label: string; nominal: number; peluang: number };
 
 type InvoiceDraft = {
   paymentGroupId: string;
+  spinByMonth: Record<string, number>; // ⬅️ POTONGAN SPIN MURNI
 
   studentId: string;
   studentName: string;
@@ -104,6 +105,20 @@ type ProofLocal = {
 function rupiah(n: number) {
   return "Rp " + Number(n || 0).toLocaleString("id-ID");
 }
+
+function formatRupiahInput(value: string) {
+  const numeric = value.replace(/[^\d]/g, "");
+  const numberValue = Number(numeric || 0);
+
+  const formatted =
+    numberValue === 0 ? "" : "Rp " + numberValue.toLocaleString("id-ID");
+
+  return {
+    raw: numberValue,
+    formatted,
+  };
+}
+
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -129,7 +144,7 @@ function monthLabelOf(d: Date) {
 }
 function formatTanggalJam(d: Date) {
   return `${pad2(d.getDate())}-${pad2(
-    d.getMonth() + 1
+    d.getMonth() + 1,
   )}-${d.getFullYear()}  ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
@@ -146,57 +161,76 @@ function invoiceNoOf(branchId: string, monthKey: string, studentId: string) {
   return `INV-${branchId}-${monthKey}-${studentId}`;
 }
 
+function buildPotonganByMonth(
+  draft: InvoiceDraft,
+  manual: Record<string, number>,
+) {
+  let potonganTotal = 0;
+  const potonganByMonth: Record<string, number> = {};
+
+  for (const mk of draft.monthKeys) {
+    // 🔹 spin dari draft awal (hasil load Firestore)
+    const spinPot = Math.max(Number(draft.potonganByMonth?.[mk] || 0), 0);
+
+    // 🔹 manual dari input admin
+    const manualPot = Math.max(Number(manual?.[mk] || 0), 0);
+
+    const totalPot = spinPot + manualPot;
+
+    potonganByMonth[mk] = totalPot;
+    potonganTotal += totalPot;
+  }
+
+  return {
+    potonganByMonth,
+    potonganTotal,
+  };
+}
+
 /**
  * ✅ Push pembayaran ke Google Sheet via Apps Script WebApp
  */
 async function pushPaymentToSheet(payload: {
-  branchId: string;
-  branchName: string;
   invoiceNo: string;
+  branchId?: string;
+  branchName: string;
+
   tanggal: string;
   jam: string;
-  studentName: string;
+
+  studentName?: string;
+  namaSiswa?: string;
+
   jenisPembayaran: string;
   metode: "Cash" | "Transfer";
-  nominal: number;
-  voucherDipakai: number;
-  voucherDidapat: number;
+
+  nominalSebelumVoucher: number;
+  voucherSpin: number;
+  voucherManual: number;
+  totalVoucher: number;
+  totalDibayar: number;
+
   monthKey?: string;
   createdAtIso?: string;
 }) {
-  const WEBAPP_URL =
-    "https://script.google.com/macros/s/AKfycbxSDNL665Co4ybElVFG3KSu8f8UBMDwTGCtI9Tw_IUNDef_pUczNBDWZu8d0ESl4el_og/exec";
-
   try {
-    const res = await fetch(WEBAPP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const res = await fetch(
+      "https://script.google.com/macros/s/AKfycbz0ju0az7ZEWCYheM3LMHQQjmdhT6R1TH2kkjLHXXHv72B1SADXKT6B9lYu-nDe98-heg/exec",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+    );
 
     const raw = await res.text();
-    console.log("push sheet status:", res.status);
     console.log("push sheet raw:", raw);
-
-    let data: any = null;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      data = null;
-    }
-
-    if (!res.ok || !data?.ok) {
-      console.log("push sheet gagal:", data || raw);
-      return false;
-    }
-
-    console.log("push sheet sukses:", data);
     return true;
-  } catch (err) {
-    console.log("push sheet error:", err);
+  } catch (e) {
+    console.log("push sheet error:", e);
     return false;
   }
-}
+} // ⬅️ INI WAJIB ADA
 
 // random sesuai peluang
 function pickByWeight(items: Hadiah[]) {
@@ -223,7 +257,7 @@ function pickByWeight(items: Hadiah[]) {
 // ✅ Convert image URI -> resized/compressed -> base64 dataUrl
 async function makeProofDataUrl(
   uri: string,
-  opts?: { maxWidth?: number; compress?: number }
+  opts?: { maxWidth?: number; compress?: number },
 ) {
   const maxWidth = opts?.maxWidth ?? 720;
   const compress = opts?.compress ?? 0.5;
@@ -231,7 +265,7 @@ async function makeProofDataUrl(
   const manip = await ImageManipulator.manipulateAsync(
     uri,
     [{ resize: { width: maxWidth } }],
-    { compress, format: ImageManipulator.SaveFormat.JPEG }
+    { compress, format: ImageManipulator.SaveFormat.JPEG },
   );
 
   const b64 = await FileSystem.readAsStringAsync(manip.uri, {
@@ -281,7 +315,7 @@ export default function BayarSPP() {
           setHadiah(
             parsed.length
               ? parsed
-              : [{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]
+              : [{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }],
           );
         } else {
           setSebelumTanggal(11);
@@ -355,7 +389,7 @@ export default function BayarSPP() {
         if (!bid) {
           Alert.alert(
             "Cabang belum diset",
-            "Akun admin ini belum punya cabangId/branchId. Set dulu dari SUPERADMIN."
+            "Akun admin ini belum punya cabangId/branchId. Set dulu dari SUPERADMIN.",
           );
           if (mounted) {
             setBranchId("");
@@ -373,7 +407,7 @@ export default function BayarSPP() {
           setBranchName(String(b.name || b.branchName || "-").trim() || "-");
         } else {
           setBranchName(
-            String(data.branchName || data.cabangName || "-") || "-"
+            String(data.branchName || data.cabangName || "-") || "-",
           );
         }
       } catch (e: any) {
@@ -405,7 +439,7 @@ export default function BayarSPP() {
     const qRef = query(
       collection(db, "students"),
       where("branchId", "==", branchId),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
 
     const unsub = onSnapshot(
@@ -419,10 +453,10 @@ export default function BayarSPP() {
             typeRaw === "Pertemuan"
               ? "Pertemuan"
               : typeRaw === "Beasiswa 0"
-              ? "Beasiswa 0"
-              : typeRaw === "Beasiswa 100"
-              ? "Beasiswa 100"
-              : "Normal";
+                ? "Beasiswa 0"
+                : typeRaw === "Beasiswa 100"
+                  ? "Beasiswa 100"
+                  : "Normal";
 
           return {
             id: d.id,
@@ -445,7 +479,7 @@ export default function BayarSPP() {
         console.log(err);
         setStudentLoading(false);
         Alert.alert("Gagal", "Tidak bisa mengambil data siswa.");
-      }
+      },
     );
 
     return () => unsub();
@@ -472,6 +506,15 @@ export default function BayarSPP() {
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [invoiceDraft, setInvoiceDraft] = useState<InvoiceDraft | null>(null);
+
+  // ✅ potongan manual (voucher tanpa spin)
+  const [manualDiscounts, setManualDiscounts] = useState<
+    Record<string, number>
+  >({});
+
+  const [manualDiscountInput, setManualDiscountInput] = useState<
+    Record<string, string>
+  >({});
 
   const [payLoading, setPayLoading] = useState(false);
 
@@ -510,7 +553,7 @@ export default function BayarSPP() {
   function getEligibleSpinMonths(selectedKeys: string[]) {
     const order = monthOptions.map((m) => m.key);
     const uniq = Array.from(new Set(selectedKeys)).filter((mk) =>
-      order.includes(mk)
+      order.includes(mk),
     );
 
     uniq.sort((a, b) => order.indexOf(a) - order.indexOf(b));
@@ -525,7 +568,7 @@ export default function BayarSPP() {
     if (lib.status !== "granted") {
       Alert.alert(
         "Izin dibutuhkan",
-        "Izinkan akses galeri untuk upload bukti."
+        "Izinkan akses galeri untuk upload bukti.",
       );
       return false;
     }
@@ -561,7 +604,7 @@ export default function BayarSPP() {
       if (made.bytesApprox > 850_000) {
         Alert.alert(
           "Peringatan",
-          "Ukuran bukti masih besar. Kalau nanti gagal simpan, coba foto ulang / pilih gambar lebih kecil."
+          "Ukuran bukti masih besar. Kalau nanti gagal simpan, coba foto ulang / pilih gambar lebih kecil.",
         );
       }
 
@@ -607,7 +650,7 @@ export default function BayarSPP() {
       if (made.bytesApprox > 850_000) {
         Alert.alert(
           "Peringatan",
-          "Ukuran bukti masih besar. Kalau nanti gagal simpan, coba foto ulang / pilih gambar lebih kecil."
+          "Ukuran bukti masih besar. Kalau nanti gagal simpan, coba foto ulang / pilih gambar lebih kecil.",
         );
       }
 
@@ -629,15 +672,16 @@ export default function BayarSPP() {
   function clearProof() {
     setProofLocal(null);
     setInvoiceDraft((p) =>
-      p ? { ...p, proofDataUrl: null, proofMime: null, proofType: null } : p
+      p ? { ...p, proofDataUrl: null, proofMime: null, proofType: null } : p,
     );
   }
+  const spinByMonth: Record<string, number> = {};
 
   // ===================== BUILD DRAFT =====================
   async function buildDraftForMonths(
     s: Student,
     months: { key: string; label: string }[],
-    keepPaymentGroupId?: string
+    keepPaymentGroupId?: string,
   ) {
     const now = new Date();
     const monthKeys = months.map((m) => m.key);
@@ -649,24 +693,44 @@ export default function BayarSPP() {
     let potonganTotal = 0;
     const potonganByMonth: Record<string, number> = {};
     try {
-      const snaps = await Promise.all(
+      const spinSnaps = await Promise.all(
         monthKeys.map((mk) =>
-          getDoc(doc(db, "student_discounts", `${s.id}_${mk}`))
-        )
+          getDoc(doc(db, "student_discounts", `${s.id}_${mk}`)),
+        ),
       );
 
-      snaps.forEach((snap, idx) => {
+      const manualSnaps = await Promise.all(
+        monthKeys.map((mk) =>
+          getDoc(doc(db, "manual_discounts", `${s.id}_${mk}`)),
+        ),
+      );
+
+      spinSnaps.forEach((spinSnap, idx) => {
         const mk = monthKeys[idx];
-        const v = snap.exists()
-          ? Math.max(Number((snap.data() as any)?.nominal || 0), 0)
+
+        const spinPot = spinSnap.exists()
+          ? Math.max(Number((spinSnap.data() as any)?.nominal || 0), 0)
           : 0;
-        potonganByMonth[mk] = v;
-        potonganTotal += v;
+
+        const manualPot = manualSnaps[idx]?.exists()
+          ? Math.max(Number((manualSnaps[idx].data() as any)?.nominal || 0), 0)
+          : 0;
+
+        const totalPot = spinPot + manualPot; // ✅ GABUNG
+
+        potonganByMonth[mk] = totalPot; // ✅ FIX
+        spinByMonth[mk] = spinPot; // tetap simpan spin
+        potonganTotal += totalPot; // ✅ FIX
       });
     } catch (e) {
-      console.log("load discounts error:", e);
-      potonganTotal = 0;
-      monthKeys.forEach((mk) => (potonganByMonth[mk] = 0));
+      console.log("❌ GAGAL LOAD DISCOUNT:", e);
+
+      Alert.alert(
+        "Potongan tidak bisa dimuat",
+        "Gagal mengambil data voucher. Cek koneksi atau izin Firestore.",
+      );
+
+      throw e; // ⬅️ HENTIKAN PROSES
     }
 
     const total = Math.max(nominalTotal - potonganTotal, 0);
@@ -676,6 +740,10 @@ export default function BayarSPP() {
       keepPaymentGroupId || `PAY-${branchId}-${Date.now()}-${s.id}`;
 
     const draft: InvoiceDraft = {
+      potonganByMonth, // hanya spin
+      spinByMonth, // ⬅️ sumber murni
+      potongan: potonganTotal,
+      total,
       paymentGroupId,
       studentId: s.id,
       studentName: s.name,
@@ -685,9 +753,6 @@ export default function BayarSPP() {
       monthKeys,
       monthLabels,
       nominal: nominalTotal,
-      potongan: potonganTotal,
-      total,
-      potonganByMonth,
       metode: "Cash",
       status: "UNPAID",
       createdAtLocal: now,
@@ -697,6 +762,33 @@ export default function BayarSPP() {
     };
 
     return draft;
+  }
+
+  function applyManualDiscountToDraft(
+    draft: InvoiceDraft,
+    manual: Record<string, number>,
+  ) {
+    let potonganTotal = 0;
+    const potonganByMonth: Record<string, number> = {};
+
+    for (const mk of draft.monthKeys) {
+      const spinPot = Math.max(Number(draft.spinByMonth?.[mk] || 0), 0);
+      const manualPot = Math.max(Number(manual?.[mk] || 0), 0);
+
+      const totalPot = spinPot + manualPot;
+
+      potonganByMonth[mk] = totalPot;
+      potonganTotal += totalPot;
+    }
+
+    const total = Math.max(draft.nominal - potonganTotal, 0);
+
+    return {
+      ...draft,
+      potonganByMonth,
+      potongan: potonganTotal,
+      total,
+    };
   }
 
   // ===================== LOAD STATUS BULAN TERBAYAR =====================
@@ -718,7 +810,7 @@ export default function BayarSPP() {
             m.key,
             { paid, paidAtText: paidAt ? formatTanggalJam(paidAt) : undefined },
           ] as const;
-        })
+        }),
       );
 
       const map: Record<string, { paid: boolean; paidAtText?: string }> = {};
@@ -803,6 +895,9 @@ export default function BayarSPP() {
   }
 
   function closeInvoiceModal() {
+    setManualDiscountInput({});
+    setManualDiscounts({});
+
     setInvoiceOpen(false);
     setInvoiceDraft(null);
     setSelected(null);
@@ -846,7 +941,7 @@ export default function BayarSPP() {
       const rebuilt = await buildDraftForMonths(
         selected,
         nextMonths,
-        invoiceDraft.paymentGroupId
+        invoiceDraft.paymentGroupId,
       );
       setInvoiceDraft((p) =>
         p
@@ -857,7 +952,7 @@ export default function BayarSPP() {
               proofMime: p.proofMime,
               proofType: p.proofType,
             }
-          : rebuilt
+          : rebuilt,
       );
 
       // ✅ reset multi spin ketika pilihan bulan berubah (biar tidak nyasar)
@@ -881,7 +976,7 @@ export default function BayarSPP() {
     if (!canSpinToday) {
       Alert.alert(
         "Spin Ditutup",
-        `Spin hanya bisa dilakukan sebelum tanggal ${sebelumTanggal}.`
+        `Spin hanya bisa dilakukan sebelum tanggal ${sebelumTanggal}.`,
       );
       return;
     }
@@ -925,7 +1020,7 @@ export default function BayarSPP() {
         const rebuilt = await buildDraftForMonths(
           selected,
           nextMonths,
-          invoiceDraft.paymentGroupId
+          invoiceDraft.paymentGroupId,
         );
         setInvoiceDraft((p) =>
           p
@@ -936,7 +1031,7 @@ export default function BayarSPP() {
                 proofMime: p.proofMime,
                 proofType: p.proofType,
               }
-            : rebuilt
+            : rebuilt,
         );
         setInvoiceLoading(false);
         return;
@@ -974,7 +1069,7 @@ export default function BayarSPP() {
         monthOptions.find((m) => m.key === currentMk)?.label || currentMk;
       Alert.alert(
         "🎁 Spin Berhasil",
-        `${lab}\n${picked.label} (${rupiah(nominalBonus)})`
+        `${lab}\n${picked.label} (${rupiah(nominalBonus)})`,
       );
 
       // ✅ rebuild invoice agar potongan langsung masuk rincian (Feb & Mar kelihatan)
@@ -987,7 +1082,7 @@ export default function BayarSPP() {
       const rebuilt = await buildDraftForMonths(
         selected,
         nextMonths,
-        invoiceDraft.paymentGroupId
+        invoiceDraft.paymentGroupId,
       );
       setInvoiceDraft((p) =>
         p
@@ -998,7 +1093,7 @@ export default function BayarSPP() {
               proofMime: p.proofMime,
               proofType: p.proofType,
             }
-          : rebuilt
+          : rebuilt,
       );
       setInvoiceLoading(false);
     } catch (e: any) {
@@ -1044,7 +1139,7 @@ export default function BayarSPP() {
       if (invoiceDraft.metode === "Transfer" && !hasProof) {
         Alert.alert(
           "Bukti Transfer",
-          "Untuk metode Transfer, wajib upload/foto bukti dulu."
+          "Untuk metode Transfer, wajib upload/foto bukti dulu.",
         );
         return;
       }
@@ -1074,7 +1169,7 @@ export default function BayarSPP() {
 
         const invSnaps = await Promise.all(invRefs.map((x) => trx.get(x.ref)));
         const discSnaps = await Promise.all(
-          discRefs.map((x) => trx.get(x.ref))
+          discRefs.map((x) => trx.get(x.ref)),
         );
 
         const alreadyPaid: string[] = [];
@@ -1083,7 +1178,7 @@ export default function BayarSPP() {
         });
         if (alreadyPaid.length) {
           throw new Error(
-            `Bulan ini sudah pernah dibayar: ${alreadyPaid.join(", ")}`
+            `Bulan ini sudah pernah dibayar: ${alreadyPaid.join(", ")}`,
           );
         }
 
@@ -1096,11 +1191,36 @@ export default function BayarSPP() {
           discMap.set(mk, pot);
         });
 
+        // ✅ simpan potongan manual (voucher)
+        for (const mk of monthKeys) {
+          const manualPot = manualDiscounts?.[mk];
+          if (manualPot && manualPot > 0) {
+            const ref = doc(db, "manual_discounts", `${selected.id}_${mk}`);
+
+            trx.set(ref, {
+              studentId: selected.id,
+              studentName: selected.name,
+              branchId,
+              branchName,
+              monthKey: mk,
+              nominal: manualPot,
+              createdAt: serverTimestamp(),
+              createdByUid: u.uid,
+              source: "MANUAL",
+              sourcePaymentGroupId: invoiceDraft.paymentGroupId,
+            });
+          }
+        }
+
         for (let i = 0; i < invRefs.length; i++) {
           const { mk, invId, ref } = invRefs[i];
           const labelMk = invoiceDraft.monthLabels[i] || mk;
 
-          const pot = discMap.get(mk) || 0;
+          const pot = Math.max(
+            Number(invoiceDraft.potonganByMonth?.[mk] || 0),
+            0,
+          );
+
           const nominal = Number(selected.spp || 0);
           const total = Math.max(nominal - pot, 0);
 
@@ -1172,28 +1292,50 @@ export default function BayarSPP() {
               proofMime: proofMime || p.proofMime || "image/jpeg",
               proofType: proofType || p.proofType || null,
             }
-          : p
+          : p,
       );
 
       if (selected) {
         await loadPaidMonthsForStudent(selected);
       }
+      // ===================== HITUNG UNTUK SPREADSHEET =====================
+      const nominalSebelumVoucher = invoiceDraft.nominal;
+
+      // total spin (yang didapat dari spin)
+      const voucherSpin = lastSpinAwardTotal;
+
+      // total voucher manual
+      const voucherManual = Object.values(manualDiscounts || {}).reduce(
+        (a, b) => a + Number(b || 0),
+        0,
+      );
+
+      // total voucher
+      const totalVoucher = voucherSpin + voucherManual;
+
+      // total yang benar-benar dibayar
+      const totalDibayar = invoiceDraft.total;
 
       try {
         const now = new Date();
         await pushPaymentToSheet({
+          invoiceNo: invoiceDraft.paymentGroupId, // OK
           branchId,
           branchName,
-          invoiceNo: invoiceDraft.paymentGroupId,
+
           tanggal: formatTanggalOnly(now),
           jam: formatJamOnly(now),
           studentName: invoiceDraft.studentName,
           jenisPembayaran: `SPP ${invoiceDraft.monthLabels.join(" + ")}`,
           metode: invoiceDraft.metode,
-          nominal: invoiceDraft.total,
-          voucherDipakai: invoiceDraft.potongan,
-          voucherDidapat: lastSpinAwardTotal,
-          monthKey: invoiceDraft.monthKeys?.[0],
+
+          nominalSebelumVoucher,
+          voucherSpin,
+          voucherManual,
+          totalVoucher,
+          totalDibayar,
+
+          monthKey: invoiceDraft.monthKeys?.[0] || "",
           createdAtIso: now.toISOString(),
         });
       } catch (e) {
@@ -1210,7 +1352,7 @@ export default function BayarSPP() {
       ) {
         Alert.alert(
           "Gagal",
-          "Ukuran bukti terlalu besar untuk Firestore. Coba pilih gambar lain / foto ulang."
+          "Ukuran bukti terlalu besar untuk Firestore. Coba pilih gambar lain / foto ulang.",
         );
         return;
       }
@@ -1475,7 +1617,7 @@ export default function BayarSPP() {
                           >
                             {monthOptions.map((m) => {
                               const active = invoiceDraft.monthKeys.includes(
-                                m.key
+                                m.key,
                               );
                               const paid = !!paidMonths?.[m.key]?.paid;
 
@@ -1504,16 +1646,16 @@ export default function BayarSPP() {
                                         paid
                                           ? "checkmark-circle"
                                           : active
-                                          ? "checkbox"
-                                          : "square-outline"
+                                            ? "checkbox"
+                                            : "square-outline"
                                       }
                                       size={18}
                                       color={
                                         paid
                                           ? "#16A34A"
                                           : active
-                                          ? "#0F172A"
-                                          : "#64748B"
+                                            ? "#0F172A"
+                                            : "#64748B"
                                       }
                                     />
                                     <View style={{ flex: 1 }}>
@@ -1602,10 +1744,10 @@ export default function BayarSPP() {
 
                     {(() => {
                       const eligible = getEligibleSpinMonths(
-                        invoiceDraft.monthKeys
+                        invoiceDraft.monthKeys,
                       );
                       const pending = eligible.filter(
-                        (mk) => multiSpinDoneMap[mk] == null
+                        (mk) => multiSpinDoneMap[mk] == null,
                       );
 
                       const stepNow = eligible.length - pending.length + 1;
@@ -1670,12 +1812,12 @@ export default function BayarSPP() {
                                   {eligible.length === 0
                                     ? "Tidak ada bulan eligible untuk spin"
                                     : pending.length === 0
-                                    ? "Semua bulan eligible sudah dapat potongan"
-                                    : `Spin ${stepNow}/${stepMax} (untuk ${
-                                        monthOptions.find(
-                                          (m) => m.key === pending[0]
-                                        )?.label || pending[0]
-                                      })`}
+                                      ? "Semua bulan eligible sudah dapat potongan"
+                                      : `Spin ${stepNow}/${stepMax} (untuk ${
+                                          monthOptions.find(
+                                            (m) => m.key === pending[0],
+                                          )?.label || pending[0]
+                                        })`}
                                 </Text>
                               </>
                             )}
@@ -1719,6 +1861,64 @@ export default function BayarSPP() {
                   </View>
                 )}
 
+                {/* ✅ POTONGAN MANUAL */}
+                {invoiceDraft.status !== "PAID" && (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={styles.invSectionTitle}>
+                      Potongan Manual (Voucher)
+                    </Text>
+
+                    <View style={styles.invMetaCard}>
+                      <Text style={styles.invMetaK}>
+                        Berlaku untuk bulan pertama yang dipilih
+                      </Text>
+
+                      <TextInput
+                        placeholder="Rp 0"
+                        keyboardType="numeric"
+                        value={
+                          manualDiscountInput[invoiceDraft.monthKeys[0]] || ""
+                        }
+                        style={{
+                          marginTop: 8,
+                          borderWidth: 1,
+                          borderColor: THEME.border,
+                          borderRadius: 12,
+                          padding: 10,
+                          fontWeight: "800",
+                          color: THEME.text,
+                        }}
+                        onChangeText={(v) => {
+                          if (!invoiceDraft) return;
+
+                          const mk = invoiceDraft.monthKeys[0];
+
+                          // 🔹 format input rupiah
+                          const { raw, formatted } = formatRupiahInput(v);
+
+                          // 1️⃣ update STRING input (biar bisa diketik)
+                          setManualDiscountInput((p) => ({
+                            ...p,
+                            [mk]: formatted,
+                          }));
+
+                          // 2️⃣ update ANGKA murni
+                          const nextManual = {
+                            ...manualDiscounts,
+                            [mk]: raw,
+                          };
+                          setManualDiscounts(nextManual);
+
+                          // 3️⃣ rebuild invoice biar total langsung berkurang
+                          setInvoiceDraft((p) =>
+                            p ? applyManualDiscountToDraft(p, nextManual) : p,
+                          );
+                        }}
+                      />
+                    </View>
+                  </View>
+                )}
+
                 {/* ✅ rincian (detail per bulan: termasuk potongan Feb & Mar) */}
                 <View style={styles.invBox}>
                   <Text style={styles.invSectionTitle}>Rincian</Text>
@@ -1730,8 +1930,16 @@ export default function BayarSPP() {
                     const nominal = Number(selected?.spp || 0);
                     const pot = Math.max(
                       Number(invoiceDraft.potonganByMonth?.[mk] || 0),
-                      0
+                      0,
                     );
+
+                    const spin = Math.max(
+                      Number(invoiceDraft.spinByMonth?.[mk] || 0),
+                      0,
+                    );
+
+                    const manual = Math.max(pot - spin, 0);
+
                     const subTotal = Math.max(nominal - pot, 0);
 
                     return (
@@ -1743,17 +1951,70 @@ export default function BayarSPP() {
                           </Text>
                         </View>
 
-                        <View style={styles.itemMonthRow2}>
-                          <Text style={styles.itemMonthSub}>Potongan</Text>
+                        {/* 🔹 POTONGAN SPIN */}
+                        {invoiceDraft.spinByMonth?.[mk] > 0 && (
+                          <View style={styles.itemMonthRow2}>
+                            <Text style={styles.itemMonthSub}>
+                              Potongan Voucher
+                            </Text>
+                            <Text
+                              style={[
+                                styles.itemMonthSubV,
+                                { color: "#16A34A" },
+                              ]}
+                            >
+                              - {rupiah(invoiceDraft.spinByMonth[mk])}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* POTONGAN SPIN */}
+                        {spin > 0 && (
+                          <View style={styles.itemMonthRow2}>
+                            <Text style={styles.itemMonthSub}>
+                              Potongan Voucher
+                            </Text>
+                            <Text
+                              style={[
+                                styles.itemMonthSubV,
+                                { color: "#16A34A" },
+                              ]}
+                            >
+                              - {rupiah(spin)}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* POTONGAN MANUAL */}
+                        {manual > 0 && (
+                          <View style={styles.itemMonthRow2}>
+                            <Text style={styles.itemMonthSub}>
+                              Potongan Manual
+                            </Text>
+                            <Text
+                              style={[
+                                styles.itemMonthSubV,
+                                { color: "#16A34A" },
+                              ]}
+                            >
+                              - {rupiah(manual)}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* ⬇️ NAH INI DIA, LETAKNYA DI SINI */}
+                        {manualDiscounts?.[mk] > 0 && (
                           <Text
-                            style={[
-                              styles.itemMonthSubV,
-                              pot > 0 && { color: "#16A34A" },
-                            ]}
+                            style={{
+                              marginTop: 2,
+                              fontSize: 11,
+                              fontWeight: "700",
+                              color: "#16A34A",
+                            }}
                           >
-                            - {rupiah(pot)}
+                            ✓ Potongan Manual
                           </Text>
-                        </View>
+                        )}
 
                         <View style={styles.itemMonthRow2}>
                           <Text style={styles.itemMonthSub}>Subtotal</Text>
@@ -1809,7 +2070,7 @@ export default function BayarSPP() {
                           activeOpacity={0.9}
                           onPress={() =>
                             setInvoiceDraft((p) =>
-                              p ? { ...p, metode: m } : p
+                              p ? { ...p, metode: m } : p,
                             )
                           }
                           style={[
