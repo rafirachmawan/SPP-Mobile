@@ -102,6 +102,12 @@ type ProofLocal = {
   bytesApprox?: number;
 };
 
+function nextMonthKey(mk: string) {
+  const [y, m] = mk.split("-").map(Number);
+  const d = new Date(y, m, 1); // month auto +1
+  return monthKeyOf(d);
+}
+
 function rupiah(n: number) {
   return "Rp " + Number(n || 0).toLocaleString("id-ID");
 }
@@ -191,6 +197,7 @@ function buildPotonganByMonth(
  * ✅ Push pembayaran ke Google Sheet via Apps Script WebApp
  */
 async function pushPaymentToSheet(payload: {
+  voucherSpinDetail?: string;
   invoiceNo: string;
   branchId?: string;
   branchName: string;
@@ -215,7 +222,7 @@ async function pushPaymentToSheet(payload: {
 }) {
   try {
     const res = await fetch(
-      "https://script.google.com/macros/s/AKfycbz0ju0az7ZEWCYheM3LMHQQjmdhT6R1TH2kkjLHXXHv72B1SADXKT6B9lYu-nDe98-heg/exec",
+      "https://script.google.com/macros/s/AKfycbytbmr5VMMIm2qNKqGYI4pBm7Qh7PU5pEKLIXIUwyyo9sKcJv4MPxInMN2CrZWjWK9ViQ/exec",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -550,17 +557,28 @@ export default function BayarSPP() {
    * ✅ FIX: Eligible spin = semua bulan yang dipilih KECUALI bulan pertama (paling awal) di selection.
    * Contoh: Jan+Feb+Mar => eligible: Feb, Mar (2x spin)
    */
-  function getEligibleSpinMonths(selectedKeys: string[]) {
+  function getEligibleSpinMonths(
+    paidKeys: string[],
+    paidMonthsMap: Record<string, { paid: boolean }>,
+  ) {
     const order = monthOptions.map((m) => m.key);
-    const uniq = Array.from(new Set(selectedKeys)).filter((mk) =>
-      order.includes(mk),
+    const result = new Set<string>();
+
+    for (const mk of paidKeys) {
+      const next = nextMonthKey(mk);
+
+      // valid month
+      if (!order.includes(next)) continue;
+
+      // bulan spin BELUM dibayar
+      if (paidMonthsMap?.[next]?.paid) continue;
+
+      result.add(next);
+    }
+
+    return Array.from(result).sort(
+      (a, b) => order.indexOf(a) - order.indexOf(b),
     );
-
-    uniq.sort((a, b) => order.indexOf(a) - order.indexOf(b));
-    if (uniq.length <= 1) return [];
-
-    // buang bulan pertama (bulan yang sedang dibayar “awal”)
-    return uniq.slice(1);
   }
 
   async function ensurePerms() {
@@ -986,7 +1004,8 @@ export default function BayarSPP() {
       return;
     }
 
-    const eligible = getEligibleSpinMonths(invoiceDraft.monthKeys);
+    const eligible = getEligibleSpinMonths(invoiceDraft.monthKeys, paidMonths);
+
     const pending = eligible.filter((mk) => multiSpinDoneMap[mk] == null);
 
     const currentMk = pending[0];
@@ -1304,6 +1323,15 @@ export default function BayarSPP() {
       // total spin (yang didapat dari spin)
       const voucherSpin = lastSpinAwardTotal;
 
+      // ✅ DETAIL VOUCHER SPIN PER BULAN (UNTUK ADMIN)
+      const voucherSpinDetail = Object.entries(multiSpinDoneMap)
+        .filter(([_, v]) => v && v > 0)
+        .map(([mk, v]) => {
+          const label = monthOptions.find((m) => m.key === mk)?.label || mk;
+          return `${label}: ${v}`;
+        })
+        .join(", ");
+
       // total voucher manual
       const voucherManual = Object.values(manualDiscounts || {}).reduce(
         (a, b) => a + Number(b || 0),
@@ -1334,6 +1362,8 @@ export default function BayarSPP() {
           voucherManual,
           totalVoucher,
           totalDibayar,
+
+          voucherSpinDetail, // ✅ BARU (INI PENTING)
 
           monthKey: invoiceDraft.monthKeys?.[0] || "",
           createdAtIso: now.toISOString(),
@@ -1745,7 +1775,9 @@ export default function BayarSPP() {
                     {(() => {
                       const eligible = getEligibleSpinMonths(
                         invoiceDraft.monthKeys,
+                        paidMonths,
                       );
+
                       const pending = eligible.filter(
                         (mk) => multiSpinDoneMap[mk] == null,
                       );
