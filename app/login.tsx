@@ -1,23 +1,23 @@
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Switch,
+  Alert,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
-  Dimensions,
   StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ✅ Firebase (LOGIC TETAP)
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
@@ -158,7 +158,7 @@ export default function Login() {
       if (msg.includes("auth/invalid-email")) {
         return Alert.alert(
           "Gagal",
-          "Format user salah. Pakai email atau username (tanpa spasi)."
+          "Format user salah. Pakai email atau username (tanpa spasi).",
         );
       }
 
@@ -227,7 +227,7 @@ export default function Login() {
               onPress={() =>
                 Alert.alert(
                   "Back",
-                  "Nanti bisa diarahkan ke halaman sebelumnya."
+                  "Nanti bisa diarahkan ke halaman sebelumnya.",
                 )
               }
             >
@@ -270,9 +270,9 @@ export default function Login() {
             <View style={styles.cardHeader}>
               <View>
                 <Text style={styles.cardTitle}>Login Admin</Text>
-                <Text style={styles.cardSub}>
+                {/* <Text style={styles.cardSub}>
                   Masukkan email superadmin atau username admin cabang.
-                </Text>
+                </Text> */}
               </View>
               <View style={styles.chip}>
                 <Ionicons name="key-outline" size={14} color="#0F172A" />
