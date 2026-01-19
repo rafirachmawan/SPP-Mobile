@@ -37,7 +37,7 @@ type Profile = {
   username: string;
   role: string;
   active: boolean;
-  branchId: string; // cabangId/branchId diseragamkan ke branchId
+  branchId: string;
 };
 
 const { width: W } = Dimensions.get("window");
@@ -60,12 +60,10 @@ export default function TabAkun() {
       try {
         const u = auth.currentUser;
         if (!u) {
-          // kalau belum login, lempar ke login
           if (mounted) router.replace("/login");
           return;
         }
 
-        // ambil data user
         const uRef = doc(db, "users", u.uid);
         const uSnap = await getDoc(uRef);
 
@@ -77,7 +75,6 @@ export default function TabAkun() {
 
         const data = uSnap.data() as any;
 
-        // aturan umum
         const active = data.active !== false;
         if (!active) {
           Alert.alert("Akun Nonaktif", "Akun kamu sedang dinonaktifkan.");
@@ -99,18 +96,14 @@ export default function TabAkun() {
 
         if (mounted) setProfile(prof);
 
-        // ambil nama cabang
         if (branchId) {
           const bRef = doc(db, "branches", branchId);
           const bSnap = await getDoc(bRef);
-          if (bSnap.exists()) {
-            const b = bSnap.data() as any;
-            if (mounted) setBranchName(String(b.name || "-").trim() || "-");
-          } else {
-            if (mounted) setBranchName("-");
+          if (mounted) {
+            setBranchName(
+              bSnap.exists() ? String(bSnap.data()?.name || "-").trim() : "-",
+            );
           }
-        } else {
-          if (mounted) setBranchName("-");
         }
       } catch (e: any) {
         console.log(e);
@@ -126,7 +119,6 @@ export default function TabAkun() {
   }, [router]);
 
   const emailInternal = useMemo(() => {
-    // admin cabang kamu dibuat pakai email internal: `${username}@cabang.spp`
     if (!profile?.username) return "-";
     return `${profile.username}@cabang.spp`;
   }, [profile]);
@@ -148,11 +140,8 @@ export default function TabAkun() {
         onPress: async () => {
           try {
             await signOutAuth(auth);
-          } catch (e) {
-            // ignore
-          } finally {
-            router.replace("/login");
-          }
+          } catch {}
+          router.replace("/login");
         },
       },
     ]);
@@ -162,8 +151,6 @@ export default function TabAkun() {
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
@@ -177,221 +164,208 @@ export default function TabAkun() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.brand}>Shining Sun </Text>
-            <Text style={styles.brandSub}>Akun Admin</Text>
-          </View>
-
-          <View style={styles.chip}>
-            <Ionicons name="person-circle-outline" size={14} color="#1E40AF" />
-            <Text style={styles.chipText}>Akun</Text>
-          </View>
-        </View>
-
-        <Text style={styles.title}>Akun Admin</Text>
+        <Text style={styles.pageTitle}>Akun Admin</Text>
         <Text style={styles.subtitle}>
-          Informasi akun admin yang sedang login.
+          Informasi akun admin yang sedang login
         </Text>
 
+        {/* ================= PROFILE CARD ================= */}
         <View style={styles.card}>
           {loading ? (
             <View style={{ alignItems: "center", paddingVertical: 16 }}>
               <ActivityIndicator />
-              <Text style={[styles.note, { marginTop: 8 }]}>
-                Memuat akun...
-              </Text>
+              <Text style={styles.note}>Memuat akun...</Text>
             </View>
           ) : !profile ? (
             <Text style={styles.note}>Akun tidak ditemukan.</Text>
           ) : (
             <>
-              <View style={styles.avatarRow}>
-                <View style={styles.avatar}>
-                  <Ionicons name="person" size={20} color="#1E40AF" />
+              <View style={styles.profileCard}>
+                <View style={styles.avatarLarge}>
+                  <Ionicons name="person" size={26} color="#1E40AF" />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.name} numberOfLines={1}>
-                    {profile.nama}
-                  </Text>
-                  <Text style={styles.sub} numberOfLines={1}>
-                    {roleLabel} • {branchName}
-                  </Text>
-                </View>
+                <Text style={styles.profileName}>{profile.nama}</Text>
+                <Text style={styles.profileSub}>
+                  {roleLabel} • {branchName}
+                </Text>
               </View>
 
-              <View style={styles.hr} />
+              <View style={styles.divider} />
 
-              <InfoLine icon="mail-outline" value={emailInternal} />
-              <InfoLine
-                icon="person-circle-outline"
-                value={`@${profile.username || "-"}`}
+              {/* ================= DETAIL ================= */}
+              <DetailItem
+                icon="mail-outline"
+                label="Email Internal"
+                value={emailInternal}
               />
-              <InfoLine icon="location-outline" value={branchName} />
-              <InfoLine icon="shield-checkmark-outline" value={roleLabel} />
-
-              <TouchableOpacity
-                activeOpacity={0.9}
-                style={styles.logoutBtn}
-                onPress={onLogout}
-              >
-                <Ionicons name="log-out-outline" size={18} color="#fff" />
-                <Text style={styles.logoutText}>Logout</Text>
-              </TouchableOpacity>
-
-              {/* <Text style={styles.note}>
-                * Data diambil dari Firestore (users/{profile.uid} + branches/
-                {profile.branchId || "-"}).
-              </Text> */}
+              <DetailItem
+                icon="person-outline"
+                label="Username"
+                value={`@${profile.username}`}
+              />
+              <DetailItem
+                icon="shield-checkmark-outline"
+                label="Role"
+                value={roleLabel}
+              />
+              <DetailItem
+                icon="location-outline"
+                label="Cabang"
+                value={branchName}
+              />
             </>
           )}
         </View>
 
-        <View style={{ height: 10 }} />
+        {/* ================= LOGOUT ================= */}
+        {!loading && profile && (
+          <View style={styles.dangerCard}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.logoutBtn}
+              onPress={onLogout}
+            >
+              <Ionicons name="log-out-outline" size={18} color="#EF4444" />
+              <Text style={styles.logoutText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function InfoLine({ icon, value }: { icon: any; value: string }) {
+// ===================== COMPONENT =====================
+function DetailItem({
+  icon,
+  label,
+  value,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+}) {
   return (
-    <View style={styles.line}>
-      <View style={styles.lineIcon}>
-        <Ionicons name={icon} size={16} color="#64748B" />
+    <View style={styles.detailItem}>
+      <Ionicons name={icon} size={18} color="#64748B" />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue} numberOfLines={1}>
+          {value}
+        </Text>
       </View>
-      <Text style={styles.lineText} numberOfLines={1}>
-        {value}
-      </Text>
     </View>
   );
 }
 
+// ===================== STYLES =====================
 const styles = StyleSheet.create({
   scroll: {
     paddingHorizontal: IS_SMALL ? 14 : 16,
-    paddingTop: 12,
-    paddingBottom: 20,
     gap: 10,
   },
 
-  header: {
-    paddingHorizontal: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  brand: {
+  pageTitle: {
     fontFamily: F.extrabold,
-    color: "#1D4ED8",
-    letterSpacing: 0.2,
-    fontSize: IS_SMALL ? 14 : 15,
-  },
-  brandSub: {
-    marginTop: 2,
-    fontFamily: F.semibold,
-    color: "#64748B",
-    fontSize: 12,
-  },
-
-  chip: {
-    backgroundColor: "rgba(219,234,254,0.95)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(191,219,254,1)",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  chipText: { color: "#1E40AF", fontFamily: F.extrabold, fontSize: 12 },
-
-  title: {
-    fontSize: IS_SMALL ? 20 : 22,
-    fontFamily: F.extrabold,
+    fontSize: 22,
     color: "#0F172A",
   },
+
   subtitle: {
     color: "#64748B",
-    lineHeight: 18,
     fontFamily: F.semibold,
     fontSize: 12,
-    marginTop: 2,
+    marginBottom: 12,
   },
 
   card: {
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 18,
-    padding: 14,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
   },
 
-  avatarRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    backgroundColor: "rgba(219,234,254,0.95)",
+  profileCard: {
+    alignItems: "center",
+  },
+
+  avatarLarge: {
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: "rgba(219,234,254,1)",
+    alignItems: "center",
+    justifyContent: "center",
     borderWidth: 1,
     borderColor: "rgba(191,219,254,1)",
-    alignItems: "center",
-    justifyContent: "center",
   },
-  name: { fontFamily: F.extrabold, color: "#0F172A", fontSize: 15 },
-  sub: { marginTop: 2, color: "#64748B", fontFamily: F.bold, fontSize: 12 },
 
-  hr: {
+  profileName: {
+    marginTop: 10,
+    fontFamily: F.extrabold,
+    fontSize: 16,
+    color: "#0F172A",
+  },
+
+  profileSub: {
+    marginTop: 4,
+    fontFamily: F.semibold,
+    fontSize: 12,
+    color: "#64748B",
+  },
+
+  divider: {
     height: 1,
     backgroundColor: "rgba(226,232,240,0.95)",
-    marginTop: 12,
-    marginBottom: 10,
+    marginVertical: 14,
   },
 
-  line: {
+  detailItem: {
     flexDirection: "row",
+    gap: 12,
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 8,
+    paddingVertical: 10,
   },
-  lineIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
-    backgroundColor: "rgba(226,232,240,0.65)",
-    alignItems: "center",
-    justifyContent: "center",
+
+  detailLabel: {
+    fontFamily: F.semibold,
+    fontSize: 11,
+    color: "#94A3B8",
   },
-  lineText: {
-    flex: 1,
-    color: "#0F172A",
+
+  detailValue: {
     fontFamily: F.extrabold,
     fontSize: 13,
+    color: "#0F172A",
+  },
+
+  dangerCard: {
+    marginTop: 14,
+    borderRadius: 18,
+    padding: 14,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
   },
 
   logoutBtn: {
-    marginTop: 12,
-    backgroundColor: "#EF4444",
-    paddingVertical: 12,
-    borderRadius: 16,
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
     gap: 8,
   },
-  logoutText: { color: "white", fontFamily: F.extrabold, fontSize: 14 },
+
+  logoutText: {
+    fontFamily: F.extrabold,
+    fontSize: 14,
+    color: "#EF4444",
+  },
 
   note: {
-    marginTop: 10,
     textAlign: "center",
     color: "#94A3B8",
     fontFamily: F.semibold,
     fontSize: 12,
-    lineHeight: 16,
   },
 });
