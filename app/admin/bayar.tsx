@@ -28,11 +28,16 @@ import * as ImageManipulator from "expo-image-manipulator";
 
 // ✅ Firebase
 import {
+  collection,
   doc,
   getDoc,
+  getDocs, // ✅ TAMBAH
+  query, // ✅ TAMBAH
   runTransaction,
-  serverTimestamp,
+  serverTimestamp, // ✅ TAMBAH
+  where, // ✅ TAMBAH
 } from "firebase/firestore";
+
 import { auth, db } from "../../firebase";
 
 const THEME = {
@@ -447,43 +452,50 @@ export default function BayarSPP() {
   const [studentLoading, setStudentLoading] = useState(true);
 
   useEffect(() => {
-    if (!branchId) return; // ⬅️ TUNGGU CABANG
+    if (!branchId) return;
+
+    let mounted = true;
 
     (async () => {
       try {
-        const refx = doc(db, "spin_settings", branchId); // ✅ PER CABANG
-        const snap = await getDoc(refx);
+        setStudentLoading(true);
 
-        if (snap.exists()) {
-          const data = snap.data() as any;
+        const q = query(
+          collection(db, "students"),
+          where("branchId", "==", branchId),
+          where("active", "==", true),
+        );
 
-          const st = Number(data.sebelumTanggal ?? 11);
-          setSebelumTanggal(Number.isFinite(st) ? st : 11);
-          setDipakaiBulanDepan(data.dipakaiBulanDepan !== false);
+        const snap = await getDocs(q);
 
-          const arr = Array.isArray(data.hadiah) ? data.hadiah : [];
-          const parsed: Hadiah[] = arr.map((h: any, idx: number) => ({
-            id: String(h.id || `H${idx + 1}`),
-            label: String(h.label || ""),
-            nominal: Number(h.nominal || 0),
-            peluang: Number(h.peluang || 0),
-          }));
+        const rows: Student[] = snap.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            name: String(data.name || "").trim(),
+            type: data.type || "Normal",
+            spp: Number(data.spp ?? data.sppDefault ?? 0),
 
-          setHadiah(
-            parsed.length
-              ? parsed
-              : [{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }],
-          );
-        } else {
-          setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
+            pertemuan: data.pertemuan,
+            active: data.active !== false,
+          };
+        });
+
+        if (mounted) {
+          setStudents(rows);
         }
       } catch (e) {
-        console.log("load spin setting error:", e);
+        console.log("❌ load students error:", e);
+        if (mounted) setStudents([]);
       } finally {
-        setSpinLoading(false);
+        if (mounted) setStudentLoading(false); // ✅ INI KUNCI
       }
     })();
-  }, [branchId]); // ⬅️ WAJIB
+
+    return () => {
+      mounted = false;
+    };
+  }, [branchId]);
 
   // ===================== SEARCH =====================
   const [queryText, setQueryText] = useState("");
@@ -1515,8 +1527,7 @@ export default function BayarSPP() {
                   <Text style={styles.meta}>
                     {s.type === "Pertemuan"
                       ? `Pertemuan (${s.pertemuan || 8}x)`
-                      : s.type}{" "}
-                    • {rupiah(s.spp)}
+                      : s.type}
                   </Text>
                 </View>
 
