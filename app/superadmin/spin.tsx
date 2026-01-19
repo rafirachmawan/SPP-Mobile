@@ -1,24 +1,32 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
   Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 
 // ✅ Firebase
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  serverTimestamp,
+  setDoc,
+} from "firebase/firestore";
+
 import { auth, db } from "../../firebase"; // sesuaikan path
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 // ✅ tambah field kuota
 type Hadiah = {
@@ -29,7 +37,7 @@ type Hadiah = {
   kuota: number; // 0 = unlimited (bebas)
 };
 
-const DOC_PATH = { col: "spin_settings", id: "global" };
+// const DOC_PATH = { col: "spin_settings", id: "global" };
 
 const F = {
   regular: "Inter_400Regular",
@@ -46,6 +54,11 @@ function toInt(v: string, fallback = 0) {
 export default function SpinSettingPage() {
   const insets = useSafeAreaInsets();
   const tabH = useBottomTabBarHeight();
+  const [branchId, setBranchId] = useState<string>("");
+
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+
+  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
 
   // ===== default dummy kalau belum ada data di Firestore =====
   const dummyHadiah = useMemo<Hadiah[]>(
@@ -73,10 +86,11 @@ export default function SpinSettingPage() {
       },
       { id: "H4", label: "Zonk", nominal: 0, peluang: 30, kuota: 0 },
     ],
-    []
+    [],
   );
 
   const [items, setItems] = useState<Hadiah[]>(dummyHadiah);
+
   const [showForm, setShowForm] = useState(false);
 
   const [label, setLabel] = useState("");
@@ -92,14 +106,60 @@ export default function SpinSettingPage() {
 
   const total = useMemo(
     () => items.reduce((a, b) => a + (b.peluang || 0), 0),
-    [items]
+    [items],
   );
+
+  // ===================== AMBIL branchId ADMIN =====================
+  useEffect(() => {
+    (async () => {
+      try {
+        const u = auth.currentUser;
+        if (!u) return;
+
+        const snap = await getDoc(doc(db, "users", u.uid));
+        if (!snap.exists()) return;
+
+        const data = snap.data() as any;
+        const bid = String(data.cabangId || data.branchId || "").trim();
+        if (!bid) return;
+
+        // setBranchId(bid);
+      } catch (e) {
+        console.log("load branchId error", e);
+      }
+    })();
+  }, []);
+
+  // 🔥 RESET daftar hadiah kalau unit belum dipilih
+  useEffect(() => {
+    if (!branchId) {
+      setItems([]);
+      setLoading(false);
+    }
+  }, [branchId]);
+
+  useEffect(() => {
+    (async () => {
+      const snap = await getDocs(collection(db, "branches"));
+      setBranches(
+        snap.docs.map((d) => ({
+          id: d.id,
+          name: String((d.data() as any).name || "Unit"),
+        })),
+      );
+    })();
+  }, []);
 
   // ===================== LOAD dari Firestore =====================
   useEffect(() => {
     (async () => {
       try {
-        const ref = doc(db, DOC_PATH.col, DOC_PATH.id);
+        if (!branchId) return;
+
+        setItems([]);
+        setLoading(true);
+
+        const ref = doc(db, "spin_settings", branchId);
         const snap = await getDoc(ref);
 
         if (snap.exists()) {
@@ -116,14 +176,16 @@ export default function SpinSettingPage() {
                   label: String(h.label || ""),
                   nominal: Number(h.nominal || 0),
                   peluang: Number(h.peluang || 0),
-                  // ✅ backward compatible: kalau dokumen lama belum ada "kuota"
                   kuota: Number.isFinite(Number(h.kuota)) ? Number(h.kuota) : 0,
                 }))
-              : dummyHadiah;
+              : [];
 
           setSebelumTanggal(st);
           setDipakaiBulanDepan(dipakai);
           setItems(hadiah);
+        } else {
+          // ⬇️ TAMBAHKAN INI
+          setItems([]);
         }
       } catch (e: any) {
         console.log(e);
@@ -133,7 +195,7 @@ export default function SpinSettingPage() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [branchId]);
 
   function addHadiah() {
     const l = label.trim();
@@ -187,7 +249,7 @@ export default function SpinSettingPage() {
         [
           { text: "Batal", style: "cancel" },
           { text: "Tetap Simpan", onPress: () => doSave(tgl) },
-        ]
+        ],
       );
     }
 
@@ -196,9 +258,14 @@ export default function SpinSettingPage() {
 
   async function doSave(tgl: number) {
     try {
+      if (!branchId) {
+        Alert.alert("Gagal", "Unit belum terdeteksi.");
+        return;
+      }
+
       setSaving(true);
 
-      const ref = doc(db, DOC_PATH.col, DOC_PATH.id);
+      const ref = doc(db, "spin_settings", branchId);
 
       await setDoc(
         ref,
@@ -215,7 +282,7 @@ export default function SpinSettingPage() {
           updatedAt: serverTimestamp(),
           updatedBy: auth.currentUser?.uid || null,
         },
-        { merge: true }
+        { merge: true },
       );
 
       Alert.alert("Berhasil", "Setting spin tersimpan.");
@@ -253,6 +320,43 @@ export default function SpinSettingPage() {
           title="Hadiah Spin"
           subtitle="Atur hadiah, peluang, dan aturan spin."
         />
+        <View style={styles.unitSelectBox}>
+          <Text style={styles.unitSelectLabel}>Pilih Unit</Text>
+
+          {/* Trigger dropdown */}
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={styles.unitDropdownTrigger}
+            onPress={() => setShowUnitDropdown((v) => !v)}
+          >
+            <Text style={styles.unitDropdownText}>
+              {branches.find((b) => b.id === branchId)?.name || "Pilih Unit"}
+            </Text>
+            <Ionicons
+              name={showUnitDropdown ? "chevron-up" : "chevron-down"}
+              size={18}
+              color="#0F172A"
+            />
+          </TouchableOpacity>
+
+          {/* Dropdown list */}
+          {showUnitDropdown &&
+            branches.map((b) => (
+              <TouchableOpacity
+                key={b.id}
+                style={[
+                  styles.unitDropdownItem,
+                  branchId === b.id && styles.unitDropdownItemActive,
+                ]}
+                onPress={() => {
+                  setBranchId(b.id);
+                  setShowUnitDropdown(false); // 🔥 auto close
+                }}
+              >
+                <Text style={styles.unitDropdownItemText}>{b.name}</Text>
+              </TouchableOpacity>
+            ))}
+        </View>
 
         <View style={styles.card}>
           {loading ? (
@@ -448,7 +552,7 @@ export default function SpinSettingPage() {
               </TouchableOpacity>
 
               <Text style={styles.note}>
-                * Setting ini tersimpan di Firestore: spin_settings/global
+                * Setting ini tersimpan per unit (spin_settings/{branchId})
               </Text>
             </>
           )}
@@ -474,6 +578,25 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
 }
 
 const styles = StyleSheet.create({
+  unitBox: {
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: "#DBEAFE",
+    borderColor: "#BFDBFE",
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  unitText: {
+    fontFamily: F.extrabold,
+    color: "#1E40AF",
+    fontSize: 13,
+  },
+
   scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
 
   header: {
@@ -663,5 +786,71 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     fontFamily: F.semibold,
     fontSize: 12,
+  },
+  unitSelectBox: {
+    marginTop: 12,
+    marginBottom: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    padding: 12,
+  },
+  unitSelectLabel: {
+    fontFamily: F.extrabold,
+    color: "#0F172A",
+    marginBottom: 8,
+  },
+  unitOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  unitOptionActive: {
+    backgroundColor: "#DBEAFE",
+  },
+  unitOptionText: {
+    fontFamily: F.bold,
+    color: "#0F172A",
+  },
+  unitDropdownTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+  },
+
+  unitDropdownText: {
+    fontFamily: F.bold,
+    color: "#0F172A",
+    fontSize: 14,
+  },
+
+  unitDropdownItem: {
+    marginTop: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  unitDropdownItemActive: {
+    backgroundColor: "#DBEAFE",
+    borderColor: "#BFDBFE",
+  },
+
+  unitDropdownItemText: {
+    fontFamily: F.bold,
+    color: "#0F172A",
   },
 });

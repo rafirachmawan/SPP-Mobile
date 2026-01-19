@@ -28,15 +28,10 @@ import * as ImageManipulator from "expo-image-manipulator";
 
 // ✅ Firebase
 import {
-  collection,
   doc,
   getDoc,
-  onSnapshot,
-  orderBy,
-  query,
   runTransaction,
   serverTimestamp,
-  where,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
@@ -320,7 +315,7 @@ export default function BayarSPP() {
   useEffect(() => {
     (async () => {
       try {
-        const refx = doc(db, "spin_settings", "global");
+        const refx = doc(db, "spin_settings", branchId);
         const snap = await getDoc(refx);
 
         if (snap.exists()) {
@@ -452,62 +447,43 @@ export default function BayarSPP() {
   const [studentLoading, setStudentLoading] = useState(true);
 
   useEffect(() => {
-    if (!branchId) {
-      setStudents([]);
-      setStudentLoading(false);
-      return;
-    }
+    if (!branchId) return; // ⬅️ TUNGGU CABANG
 
-    setStudentLoading(true);
+    (async () => {
+      try {
+        const refx = doc(db, "spin_settings", branchId); // ✅ PER CABANG
+        const snap = await getDoc(refx);
 
-    const qRef = query(
-      collection(db, "students"),
-      where("branchId", "==", branchId),
-      orderBy("createdAt", "desc"),
-    );
+        if (snap.exists()) {
+          const data = snap.data() as any;
 
-    const unsub = onSnapshot(
-      qRef,
-      (snap) => {
-        const rows: Student[] = snap.docs.map((d) => {
-          const data = d.data() as any;
+          const st = Number(data.sebelumTanggal ?? 11);
+          setSebelumTanggal(Number.isFinite(st) ? st : 11);
+          setDipakaiBulanDepan(data.dipakaiBulanDepan !== false);
 
-          const typeRaw = String(data.type || data.tipe || "Normal");
-          const type: Student["type"] =
-            typeRaw === "Pertemuan"
-              ? "Pertemuan"
-              : typeRaw === "Beasiswa 0"
-                ? "Beasiswa 0"
-                : typeRaw === "Beasiswa 100"
-                  ? "Beasiswa 100"
-                  : "Normal";
+          const arr = Array.isArray(data.hadiah) ? data.hadiah : [];
+          const parsed: Hadiah[] = arr.map((h: any, idx: number) => ({
+            id: String(h.id || `H${idx + 1}`),
+            label: String(h.label || ""),
+            nominal: Number(h.nominal || 0),
+            peluang: Number(h.peluang || 0),
+          }));
 
-          return {
-            id: d.id,
-            name: String(data.name || data.nama || "").trim(),
-            type,
-            spp: Number(data.sppDefault ?? data.spp ?? 0) || 0,
-            pertemuan:
-              data.pertemuan != null ? Number(data.pertemuan || 0) : undefined,
-            active: data.active !== false, // ✅ FIX
-          };
-        });
-
-        // ✅ FIX: hanya tampilkan siswa aktif
-        const activeRows = rows.filter((x) => x.active !== false);
-
-        setStudents(activeRows);
-        setStudentLoading(false);
-      },
-      (err) => {
-        console.log(err);
-        setStudentLoading(false);
-        Alert.alert("Gagal", "Tidak bisa mengambil data siswa.");
-      },
-    );
-
-    return () => unsub();
-  }, [branchId]);
+          setHadiah(
+            parsed.length
+              ? parsed
+              : [{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }],
+          );
+        } else {
+          setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
+        }
+      } catch (e) {
+        console.log("load spin setting error:", e);
+      } finally {
+        setSpinLoading(false);
+      }
+    })();
+  }, [branchId]); // ⬅️ WAJIB
 
   // ===================== SEARCH =====================
   const [queryText, setQueryText] = useState("");
@@ -1030,6 +1006,8 @@ export default function BayarSPP() {
       Alert.alert("Selesai", "Semua bulan yang eligible sudah di-spin.");
       return;
     }
+    const lab =
+      monthOptions.find((m) => m.key === currentMk)?.label || currentMk;
 
     try {
       setMultiSpinLoading(true);
@@ -1073,15 +1051,64 @@ export default function BayarSPP() {
         return;
       }
 
-      const picked = pickByWeight(hadiah);
-      if (!picked) throw new Error("Hadiah spin kosong.");
-
-      const nominalBonus = Math.max(Number(picked.nominal || 0), 0);
+      let picked: any = null;
+      let pickedNominal = 0;
 
       await runTransaction(db, async (trx) => {
-        const snap = await trx.get(refx);
-        if (snap.exists()) return;
+        // ❌ Cegah double spin
+        const discSnap = await trx.get(refx);
+        if (discSnap.exists()) return;
 
+        const spinSettingRef = doc(db, "spin_settings", branchId);
+        const settingSnap = await trx.get(spinSettingRef);
+
+        if (!settingSnap.exists()) {
+          throw new Error("Setting spin cabang tidak ditemukan");
+        }
+
+        const data = settingSnap.data();
+        const hadiahAll = Array.isArray(data.hadiah) ? data.hadiah : [];
+
+        // 1️⃣ FILTER HADIAH YANG MASIH ADA KUOTA
+        const hadiahAktif = hadiahAll.filter(
+          (h: any) => h.kuota === 0 || h.kuota > 0,
+        );
+
+        if (hadiahAktif.length === 0) {
+          throw new Error("Semua voucher sudah habis");
+        }
+
+        // 2️⃣ RANDOM SESUAI PELUANG
+        const totalPeluang = hadiahAktif.reduce(
+          (a: number, b: any) => a + Number(b.peluang || 0),
+          0,
+        );
+
+        let rand = Math.random() * totalPeluang;
+        for (const h of hadiahAktif) {
+          rand -= Number(h.peluang || 0);
+          if (rand <= 0) {
+            picked = h;
+            break;
+          }
+        }
+
+        if (!picked) picked = hadiahAktif[0];
+        pickedNominal = Number(picked.nominal || 0);
+
+        // 3️⃣ KURANGI KUOTA (JIKA BUKAN UNLIMITED)
+        const idx = hadiahAll.findIndex((h: any) => h.id === picked.id);
+        if (hadiahAll[idx].kuota > 0) {
+          hadiahAll[idx].kuota -= 1;
+        }
+
+        // 4️⃣ UPDATE SPIN SETTING
+        trx.update(spinSettingRef, {
+          hadiah: hadiahAll,
+          updatedAt: serverTimestamp(),
+        });
+
+        // 5️⃣ SIMPAN HASIL SPIN
         trx.set(refx, {
           studentId: selected.id,
           studentName: selected.name,
@@ -1089,23 +1116,20 @@ export default function BayarSPP() {
           branchName,
           monthKey: currentMk,
           label: picked.label,
-          nominal: nominalBonus,
+          nominal: pickedNominal,
           createdAt: serverTimestamp(),
           source: "SPIN_STEP_BY_STEP",
           sourcePaymentGroupId: invoiceDraft.paymentGroupId,
-          // ✅ dipakai untuk invoice bulan itu (bulan yang di-spin)
           dipakaiBulanDepan: false,
         });
       });
 
-      setMultiSpinDoneMap((p) => ({ ...p, [currentMk]: nominalBonus }));
-      setLastSpinAwardTotal((p) => p + nominalBonus);
+      setMultiSpinDoneMap((p) => ({ ...p, [currentMk]: pickedNominal }));
+      setLastSpinAwardTotal((p) => p + pickedNominal);
 
-      const lab =
-        monthOptions.find((m) => m.key === currentMk)?.label || currentMk;
       Alert.alert(
         "🎁 Spin Berhasil",
-        `${lab}\n${picked.label} (${rupiah(nominalBonus)})`,
+        `${lab}\n${picked.label} (${rupiah(pickedNominal)})`,
       );
 
       // ✅ rebuild invoice agar potongan langsung masuk rincian (Feb & Mar kelihatan)
