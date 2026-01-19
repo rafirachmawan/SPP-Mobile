@@ -317,45 +317,45 @@ export default function BayarSPP() {
   const [hadiah, setHadiah] = useState<Hadiah[]>([]);
   const canSpinToday = day < sebelumTanggal;
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const refx = doc(db, "spin_settings", branchId);
-        const snap = await getDoc(refx);
+  // useEffect(() => {
+  //   (async () => {
+  //     try {
+  //       const refx = doc(db, "spin_settings", branchId);
+  //       const snap = await getDoc(refx);
 
-        if (snap.exists()) {
-          const data = snap.data() as any;
-          const st = Number(data.sebelumTanggal ?? 11);
-          setSebelumTanggal(Number.isFinite(st) ? st : 11);
-          setDipakaiBulanDepan(data.dipakaiBulanDepan !== false);
+  //       if (snap.exists()) {
+  //         const data = snap.data() as any;
+  //         const st = Number(data.sebelumTanggal ?? 11);
+  //         setSebelumTanggal(Number.isFinite(st) ? st : 11);
+  //         setDipakaiBulanDepan(data.dipakaiBulanDepan !== false);
 
-          const arr = Array.isArray(data.hadiah) ? data.hadiah : [];
-          const parsed: Hadiah[] = arr.map((h: any, idx: number) => ({
-            id: String(h.id || `H${idx + 1}`),
-            label: String(h.label || ""),
-            nominal: Number(h.nominal || 0),
-            peluang: Number(h.peluang || 0),
-          }));
-          setHadiah(
-            parsed.length
-              ? parsed
-              : [{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }],
-          );
-        } else {
-          setSebelumTanggal(11);
-          setDipakaiBulanDepan(true);
-          setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
-        }
-      } catch (e) {
-        console.log(e);
-        setSebelumTanggal(11);
-        setDipakaiBulanDepan(true);
-        setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
-      } finally {
-        setSpinLoading(false);
-      }
-    })();
-  }, []);
+  //         const arr = Array.isArray(data.hadiah) ? data.hadiah : [];
+  //         const parsed: Hadiah[] = arr.map((h: any, idx: number) => ({
+  //           id: String(h.id || `H${idx + 1}`),
+  //           label: String(h.label || ""),
+  //           nominal: Number(h.nominal || 0),
+  //           peluang: Number(h.peluang || 0),
+  //         }));
+  //         setHadiah(
+  //           parsed.length
+  //             ? parsed
+  //             : [{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }],
+  //         );
+  //       } else {
+  //         setSebelumTanggal(11);
+  //         setDipakaiBulanDepan(true);
+  //         setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
+  //       }
+  //     } catch (e) {
+  //       console.log(e);
+  //       setSebelumTanggal(11);
+  //       setDipakaiBulanDepan(true);
+  //       setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
+  //     } finally {
+  //       setSpinLoading(false);
+  //     }
+  //   })();
+  // }, []);
 
   // ===================== CABANG ADMIN LOGIN =====================
   const [branchId, setBranchId] = useState<string>("");
@@ -446,6 +446,66 @@ export default function BayarSPP() {
       mounted = false;
     };
   }, []);
+
+  // ===================== LOAD SPIN SETTING (BERDASARKAN CABANG) =====================
+  useEffect(() => {
+    if (!branchId) return;
+
+    let mounted = true;
+
+    (async () => {
+      try {
+        setSpinLoading(true);
+
+        const refx = doc(db, "spin_settings", branchId);
+        const snap = await getDoc(refx);
+
+        if (snap.exists()) {
+          const data = snap.data() as any;
+
+          const st = Number(data.sebelumTanggal ?? 11);
+          if (mounted) {
+            setSebelumTanggal(Number.isFinite(st) ? st : 11);
+            setDipakaiBulanDepan(data.dipakaiBulanDepan !== false);
+
+            const arr = Array.isArray(data.hadiah) ? data.hadiah : [];
+            const parsed: Hadiah[] = arr.map((h: any, idx: number) => ({
+              id: String(h.id || `H${idx + 1}`),
+              label: String(h.label || ""),
+              nominal: Number(h.nominal || 0),
+              peluang: Number(h.peluang || 0),
+            }));
+
+            setHadiah(
+              parsed.length
+                ? parsed
+                : [{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }],
+            );
+          }
+        } else {
+          // fallback default
+          if (mounted) {
+            setSebelumTanggal(11);
+            setDipakaiBulanDepan(true);
+            setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
+          }
+        }
+      } catch (e) {
+        console.log("❌ load spin setting error:", e);
+        if (mounted) {
+          setSebelumTanggal(11);
+          setDipakaiBulanDepan(true);
+          setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
+        }
+      } finally {
+        if (mounted) setSpinLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [branchId]);
 
   // ===================== SISWA REALTIME =====================
   const [students, setStudents] = useState<Student[]>([]);
