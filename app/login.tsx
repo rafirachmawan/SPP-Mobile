@@ -24,6 +24,14 @@ import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase"; // ✅ sesuaikan path
 
+// ✅ SAMAKAN DENGAN DASHBOARD
+const F = {
+  regular: "Inter_400Regular",
+  semibold: "Inter_600SemiBold",
+  bold: "Inter_700Bold",
+  extrabold: "Inter_800ExtraBold",
+};
+
 function normalizeUser(input: string) {
   const raw = input.trim().toLowerCase();
 
@@ -381,9 +389,9 @@ export default function Login() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <Text style={styles.note}>
+            {/* <Text style={styles.note}>
               * Jika “Ingat saya” ON, yang disimpan hanya USER (bukan password).
-            </Text>
+            </Text> */}
           </View>
 
           <View style={{ height: 16 }} />
@@ -483,18 +491,13 @@ const styles = StyleSheet.create({
 
   hi: {
     fontSize: 30,
-    fontWeight: "900",
+    fontFamily: F.extrabold,
     color: "#0F172A",
-    letterSpacing: 0.2,
   },
   desc: {
-    marginTop: 8,
     color: "#64748B",
-    lineHeight: 20,
-    maxWidth: 340,
-    fontWeight: "700",
+    fontFamily: F.semibold,
   },
-
   card: {
     backgroundColor: "rgba(255,255,255,0.92)",
     borderRadius: 26,
@@ -516,8 +519,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 18,
-    fontWeight: "900",
-    color: "#0F172A",
+    fontFamily: F.extrabold,
   },
   cardSub: {
     marginTop: 6,
@@ -545,11 +547,8 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    fontWeight: "900",
-    color: "#0F172A",
-    marginBottom: 8,
+    fontFamily: F.bold,
   },
-
   inputWrap: {
     position: "relative",
     borderWidth: 1,
@@ -569,7 +568,7 @@ const styles = StyleSheet.create({
   input: {
     fontSize: 14,
     color: "#0F172A",
-    fontWeight: "800",
+    fontFamily: F.bold,
   },
   rightIconBtn: {
     position: "absolute",
@@ -594,9 +593,8 @@ const styles = StyleSheet.create({
   },
   remember: {
     color: "#0F172A",
-    fontWeight: "800",
+    fontFamily: F.semibold,
   },
-
   hintPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -629,16 +627,13 @@ const styles = StyleSheet.create({
   },
   primaryText: {
     color: "white",
-    fontWeight: "900",
-    fontSize: 15,
-    letterSpacing: 0.2,
+    fontFamily: F.extrabold,
   },
-
   note: {
     marginTop: 12,
     textAlign: "center",
     color: "#94A3B8",
-    fontWeight: "700",
+    fontFamily: F.semibold,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -646,7 +641,7 @@ const styles = StyleSheet.create({
   footer: {
     textAlign: "center",
     color: "rgba(100,116,139,0.9)",
-    fontWeight: "700",
+    fontFamily: F.semibold,
     fontSize: 12,
   },
 });

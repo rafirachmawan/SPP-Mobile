@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-// ✅ Firebase
+// ✅ Firebase (TIDAK DIUBAH)
 import {
   collection,
   doc,
@@ -25,6 +25,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
+/* ===================== THEME ===================== */
 const F = {
   regular: "Inter_400Regular",
   semibold: "Inter_600SemiBold",
@@ -43,6 +44,7 @@ const THEME = {
   primary: "#0EA5E9",
 };
 
+/* ===================== UTIL ===================== */
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -56,11 +58,13 @@ function rupiah(n: number) {
 const { width: W } = Dimensions.get("window");
 const IS_SMALL = W < 380;
 
+/* ===================== COMPONENT ===================== */
 export default function AdminDashboard() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const mkNow = useMemo(() => monthKeyOf(new Date()), []);
 
+  /* ===== PROFILE & BRANCH (TIDAK DIUBAH) ===== */
   const [branchId, setBranchId] = useState<string>("");
   const [branchName, setBranchName] = useState<string>("-");
   const [profileLoading, setProfileLoading] = useState(true);
@@ -97,10 +101,11 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  const [totalSiswa, setTotalSiswa] = useState<number>(0);
-  const [sudahBayarBulanIni, setSudahBayarBulanIni] = useState<number>(0);
-  const [nominalMasukBulanIni, setNominalMasukBulanIni] = useState<number>(0);
-  const [statsLoading, setStatsLoading] = useState<boolean>(true);
+  /* ===== STATS (TIDAK DIUBAH) ===== */
+  const [totalSiswa, setTotalSiswa] = useState(0);
+  const [sudahBayarBulanIni, setSudahBayarBulanIni] = useState(0);
+  const [nominalMasukBulanIni, setNominalMasukBulanIni] = useState(0);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
     if (!branchId) return;
@@ -124,52 +129,29 @@ export default function AdminDashboard() {
     const unsub = onSnapshot(qInv, (snap) => {
       const uniq = new Set<string>();
       let totalNominal = 0;
+
       snap.docs.forEach((d) => {
         const data = d.data() as any;
         const sid = String(data.studentId || "").trim();
         if (sid) uniq.add(sid);
         totalNominal += Number(data.total || 0) || 0;
       });
+
       setSudahBayarBulanIni(uniq.size);
       setNominalMasukBulanIni(totalNominal);
       setStatsLoading(false);
     });
+
     return () => unsub();
   }, [branchId, mkNow]);
 
-  const stats = useMemo(
-    () => [
-      {
-        label: "Total Siswa",
-        value: String(totalSiswa),
-        icon: "school-outline",
-      },
-      {
-        label: "Bayar Bulan Ini",
-        value: String(sudahBayarBulanIni),
-        icon: "checkmark-circle-outline",
-      },
-      {
-        label: "Nominal Masuk Bulan Ini",
-        value: rupiah(nominalMasukBulanIni),
-        icon: "cash-outline",
-      },
-    ],
-    [totalSiswa, sudahBayarBulanIni, nominalMasukBulanIni],
-  );
-
+  /* ===== MENU (TIDAK DIUBAH) ===== */
   const actions = [
     {
       title: "Bayar SPP",
-      desc: "Cari siswa → invoice → bayar.",
+      desc: "Cari siswa, buat invoice, lalu bayar.",
       icon: "receipt-outline",
       to: "/admin/bayar",
-    },
-    {
-      title: "Kelola Siswa",
-      desc: "Tambah & hapus siswa cabang.",
-      icon: "person-add-outline",
-      to: "/admin/kelola-siswa",
     },
     {
       title: "Mutasi Siswa",
@@ -178,15 +160,22 @@ export default function AdminDashboard() {
       to: "/admin/siswa",
     },
     {
+      title: "Kelola Siswa",
+      desc: "Tambah & hapus siswa cabang.",
+      icon: "person-add-outline",
+      to: "/admin/kelola-siswa",
+    },
+    {
       title: "Riwayat",
-      desc: "Riwayat pembayaran.",
+      desc: "Riwayat semua transaksi.",
       icon: "time-outline",
       to: "/admin/riwayat",
     },
   ];
 
-  const topPad = Math.max(insets.top + 8, 16);
+  const topPad = Math.max(insets.top + 12, 20);
 
+  /* ===================== UI ===================== */
   return (
     <View style={{ flex: 1 }}>
       <LinearGradient
@@ -198,218 +187,215 @@ export default function AdminDashboard() {
         contentContainerStyle={[styles.scroll, { paddingTop: topPad }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* ================= HEADER ================= */}
         <View style={styles.headerRow}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.brand}>Shining Sun 🎈</Text>
-            <Text style={styles.title}>Dashboard Admin</Text>
-            <Text style={styles.subtitle}>
-              Kelola pembayaran SPP cabang ini.
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Dashboard Admin</Text>
+            <Text style={styles.headerSub}>
+              Ringkasan aktivitas & pembayaran cabang
             </Text>
-
-            {/* (opsional visual) loading profil */}
-            {profileLoading ? (
-              <Text style={styles.profileHint}>Memuat profil cabang...</Text>
-            ) : null}
           </View>
 
-          {/* CHIP CABANG */}
-          <View style={styles.pill}>
-            <Text style={styles.pillText} numberOfLines={1}>
-              {branchName}
+          {/* CHIP UNIT DI KANAN ATAS */}
+          <View style={styles.branchChipTop}>
+            <Text style={styles.branchText}>
+              {profileLoading ? "Memuat..." : branchName}
             </Text>
           </View>
         </View>
 
-        <View style={styles.statsGrid}>
-          {stats.map((s) => (
-            <View key={s.label} style={styles.statCard}>
-              <View style={styles.statIcon}>
-                <Ionicons name={s.icon as any} size={18} color="#1D4ED8" />
-              </View>
+        {/* ================= KPI UTAMA ================= */}
+        <View style={styles.kpiMain}>
+          <Text style={styles.kpiLabel}>Total Masuk Bulan Ini</Text>
 
-              <Text style={styles.statLabel} numberOfLines={2}>
-                {s.label}
-              </Text>
-
-              {statsLoading ? (
-                <View style={{ marginTop: 6 }}>
-                  <ActivityIndicator size="small" />
-                </View>
-              ) : (
-                <Text
-                  style={[
-                    styles.statValue,
-                    s.label === "Nominal Masuk Bulan Ini" &&
-                      styles.statValueMoney,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {s.value}
-                </Text>
-              )}
-            </View>
-          ))}
+          {statsLoading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.kpiValue}>{rupiah(nominalMasukBulanIni)}</Text>
+          )}
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Menu Utama</Text>
-          <Text style={styles.cardSub}>Pilih fitur.</Text>
+        {/* ================= KPI PENDUKUNG ================= */}
+        <View style={styles.kpiRow}>
+          <View style={styles.kpiSmall}>
+            <Text style={styles.kpiSmallLabel}>Bayar Bulan Ini</Text>
+            <Text style={styles.kpiSmallValue}>{sudahBayarBulanIni}</Text>
+          </View>
+
+          <View style={styles.kpiSmall}>
+            <Text style={styles.kpiSmallLabel}>Total Siswa</Text>
+            <Text style={styles.kpiSmallValue}>{totalSiswa}</Text>
+          </View>
+        </View>
+
+        {/* ================= MENU ================= */}
+        <View style={styles.menuCard}>
+          <Text style={styles.menuTitle}>Menu Aksi</Text>
 
           {actions.map((a) => (
             <TouchableOpacity
               key={a.title}
               activeOpacity={0.9}
               onPress={() => router.push(a.to as any)}
-              style={styles.rowBtn}
+              style={styles.menuItem}
             >
-              <View style={styles.rowIcon}>
-                <Ionicons name={a.icon as any} size={18} color="#1D4ED8" />
+              <View style={styles.menuIcon}>
+                <Ionicons name={a.icon as any} size={20} color="#2563EB" />
               </View>
+
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>{a.title}</Text>
-                <Text style={styles.rowDesc} numberOfLines={2}>
-                  {a.desc}
-                </Text>
+                <Text style={styles.menuText}>{a.title}</Text>
+                <Text style={styles.menuDesc}>{a.desc}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+
+              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={{ height: 10 }} />
+        <View style={{ height: 16 }} />
       </ScrollView>
     </View>
   );
 }
 
+/* ===================== STYLES ===================== */
 const styles = StyleSheet.create({
-  scroll: { paddingHorizontal: IS_SMALL ? 14 : 16, paddingBottom: 22 },
-
   headerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 12,
-  },
-  headerLeft: { flex: 1 },
-
-  brand: {
-    color: "#2563EB",
-    fontFamily: F.extrabold,
-    fontSize: IS_SMALL ? 14 : 15,
-  },
-  title: {
-    marginTop: 6,
-    fontSize: IS_SMALL ? 20 : 22, // ✅ diperkecil
-    fontFamily: F.extrabold,
-    color: THEME.text,
-  },
-  subtitle: {
-    marginTop: 6,
-    color: THEME.sub,
-    fontFamily: F.semibold,
-    lineHeight: 18,
-    fontSize: 12,
-  },
-  profileHint: {
-    marginTop: 6,
-    color: "#94A3B8",
-    fontFamily: F.semibold,
-    fontSize: 12,
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
 
-  pill: {
-    alignSelf: "flex-start",
-    maxWidth: "48%",
-    backgroundColor: "rgba(219,234,254,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(191,219,254,1)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+  branchChipTop: {
+    backgroundColor: "#DBEAFE",
     borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    maxWidth: "45%",
   },
-  pillText: { color: "#1E40AF", fontFamily: F.extrabold, fontSize: 12 },
 
-  statsGrid: {
-    marginTop: 12,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8, // ✅ lebih rapat
-  },
-  statCard: {
-    width: "48.6%",
-    backgroundColor: THEME.card,
-    borderRadius: 16, // ✅ diperkecil
-    borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.95)",
-    padding: 10, // ✅ diperkecil
-  },
-  statIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 14,
-    backgroundColor: "rgba(219,234,254,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(191,219,254,1)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-  },
-  statLabel: { color: THEME.sub, fontFamily: F.bold, fontSize: 12 },
-  statValue: {
-    marginTop: 6,
-    color: THEME.text,
+  branchText: {
     fontFamily: F.extrabold,
-    fontSize: IS_SMALL ? 18 : 19,
-  },
-  statValueMoney: {
-    fontSize: IS_SMALL ? 15 : 16, // ✅ nominal biasanya panjang
+    fontSize: 12,
+    color: "#1E40AF",
   },
 
-  card: {
-    marginTop: 12,
-    backgroundColor: THEME.card,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.95)",
-    padding: 12,
+  scroll: {
+    paddingHorizontal: IS_SMALL ? 14 : 16,
+    paddingBottom: 22,
   },
-  cardTitle: { fontSize: 15, fontFamily: F.extrabold, color: THEME.text },
-  cardSub: {
-    marginTop: 4,
-    color: THEME.sub,
+
+  header: {
+    marginBottom: 16,
+  },
+  headerTitle: {
+    fontFamily: F.extrabold,
+    fontSize: 22,
+    color: THEME.text,
+  },
+  headerSub: {
+    marginTop: 6,
     fontFamily: F.semibold,
     fontSize: 12,
+    color: THEME.sub,
+  },
+  branchChip: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+    backgroundColor: "#DBEAFE",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
 
-  rowBtn: {
+  kpiMain: {
+    backgroundColor: THEME.primary,
+    borderRadius: 20,
+    padding: 16,
+  },
+  kpiLabel: {
+    fontFamily: F.semibold,
+    fontSize: 12,
+    color: "#E0F2FE",
+  },
+  kpiValue: {
+    marginTop: 8,
+    fontFamily: F.extrabold,
+    fontSize: 26,
+    color: "#FFFFFF",
+  },
+
+  kpiRow: {
     marginTop: 10,
     flexDirection: "row",
     gap: 10,
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.9)",
+  },
+  kpiSmall: {
+    flex: 1,
+    backgroundColor: THEME.card,
+    borderRadius: 16,
+    padding: 12,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
   },
-  rowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 14,
-    backgroundColor: "rgba(219,234,254,0.95)",
+  kpiSmallLabel: {
+    fontFamily: F.semibold,
+    fontSize: 12,
+    color: THEME.sub,
+  },
+  kpiSmallValue: {
+    marginTop: 6,
+    fontFamily: F.extrabold,
+    fontSize: 20,
+    color: THEME.text,
+  },
+
+  menuCard: {
+    marginTop: 16,
+    backgroundColor: THEME.card,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
-    borderColor: "rgba(191,219,254,1)",
+    borderColor: "rgba(226,232,240,0.95)",
+  },
+  menuTitle: {
+    fontFamily: F.extrabold,
+    fontSize: 14,
+    color: THEME.text,
+    marginBottom: 8,
+  },
+  menuItem: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+  },
+  menuIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    backgroundColor: "#EFF6FF",
     alignItems: "center",
     justifyContent: "center",
   },
-  rowTitle: { fontFamily: F.extrabold, color: THEME.text, fontSize: 13 },
-  rowDesc: {
+  menuText: {
+    fontFamily: F.extrabold,
+    fontSize: 13,
+    color: THEME.text,
+  },
+  menuDesc: {
     marginTop: 2,
-    color: THEME.sub,
     fontFamily: F.semibold,
     fontSize: 12,
-    lineHeight: 16,
+    color: THEME.sub,
   },
 });

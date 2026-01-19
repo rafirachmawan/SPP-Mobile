@@ -179,7 +179,7 @@ export default function TabAkun() {
       >
         <View style={styles.header}>
           <View>
-            <Text style={styles.brand}>Shining Sun 🎈</Text>
+            <Text style={styles.brand}>Shining Sun </Text>
             <Text style={styles.brandSub}>Akun Admin</Text>
           </View>
 

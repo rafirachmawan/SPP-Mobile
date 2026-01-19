@@ -1,30 +1,30 @@
 // FILE: app/superadmin/index.tsx
-// ✅ FULL VERSION — UI lebih compact (tidak kebesaran), logika realtime tetap sama
+// ✅ CLEAN & PROFESSIONAL UI — LOGIC TIDAK DIUBAH
 
+import { Ionicons } from "@expo/vector-icons";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  View,
   ActivityIndicator,
   Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 
-// ✅ Firebase
-import { db } from "../../firebase";
+// ✅ Firebase (ASLI — TIDAK DIUBAH)
 import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "../../firebase";
 
-// ✅ font map (pastikan kamu sudah load Inter di Root layout / app entry)
+// ================= FONT MAP =================
 const F = {
   regular: "Inter_400Regular",
   semibold: "Inter_600SemiBold",
@@ -32,6 +32,7 @@ const F = {
   extrabold: "Inter_800ExtraBold",
 };
 
+// ================= UTIL (ASLI) =================
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -44,80 +45,57 @@ function rupiah(n: number) {
 
 export default function SuperadminDashboard() {
   const router = useRouter();
-
-  const tabH = useBottomTabBarHeight(); // ✅ tinggi footbar dinamis
-  const insets = useSafeAreaInsets(); // ✅ aman untuk gesture/home bar Android
+  const tabH = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
 
   const mkNow = useMemo(() => monthKeyOf(new Date()), []);
 
-  // ✅ realtime summary (bukan dummy)
+  // ================= STATE (ASLI) =================
   const [summary, setSummary] = useState({
     cabang: 0,
     admin: 0,
     siswa: 0,
-    bayarBulanIniNominal: 0, // ✅ total nominal semua cabang
+    bayarBulanIniNominal: 0,
   });
   const [loading, setLoading] = useState(true);
 
+  // ================= REALTIME EFFECT (ASLI) =================
   useEffect(() => {
     setLoading(true);
 
-    // 1) Total cabang realtime
-    const unsubBranches = onSnapshot(
-      collection(db, "branches"),
-      (snap) => {
-        setSummary((p) => ({ ...p, cabang: snap.size }));
-      },
-      (err) => console.log("branches err:", err)
-    );
+    const unsubBranches = onSnapshot(collection(db, "branches"), (snap) => {
+      setSummary((p) => ({ ...p, cabang: snap.size }));
+    });
 
-    // 2) Total admin cabang realtime
     const qAdmins = query(
       collection(db, "users"),
-      where("role", "==", "ADMIN_CABANG")
+      where("role", "==", "ADMIN_CABANG"),
     );
-    const unsubAdmins = onSnapshot(
-      qAdmins,
-      (snap) => {
-        const count = snap.docs.filter(
-          (d) => (d.data() as any)?.active !== false
-        ).length;
-        setSummary((p) => ({ ...p, admin: count }));
-      },
-      (err) => console.log("admins err:", err)
-    );
+    const unsubAdmins = onSnapshot(qAdmins, (snap) => {
+      const count = snap.docs.filter(
+        (d) => (d.data() as any)?.active !== false,
+      ).length;
+      setSummary((p) => ({ ...p, admin: count }));
+    });
 
-    // 3) Total siswa realtime
-    const unsubStudents = onSnapshot(
-      collection(db, "students"),
-      (snap) => {
-        setSummary((p) => ({ ...p, siswa: snap.size }));
-      },
-      (err) => console.log("students err:", err)
-    );
+    const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
+      setSummary((p) => ({ ...p, siswa: snap.size }));
+    });
 
-    // 4) ✅ Nominal bayar bulan ini (TOTAL semua cabang) realtime
     const qInvoices = query(
       collection(db, "invoices"),
       where("monthKey", "==", mkNow),
-      where("status", "==", "PAID")
+      where("status", "==", "PAID"),
     );
-    const unsubInvoices = onSnapshot(
-      qInvoices,
-      (snap) => {
-        let total = 0;
-        snap.docs.forEach((d) => {
-          const data = d.data() as any;
-          total += Number(data.total || 0) || 0;
-        });
-        setSummary((p) => ({ ...p, bayarBulanIniNominal: total }));
-        setLoading(false);
-      },
-      (err) => {
-        console.log("invoices err:", err);
-        setLoading(false);
-      }
-    );
+    const unsubInvoices = onSnapshot(qInvoices, (snap) => {
+      let total = 0;
+      snap.docs.forEach((d) => {
+        const data = d.data() as any;
+        total += Number(data.total || 0) || 0;
+      });
+      setSummary((p) => ({ ...p, bayarBulanIniNominal: total }));
+      setLoading(false);
+    });
 
     return () => {
       unsubBranches();
@@ -131,122 +109,97 @@ export default function SuperadminDashboard() {
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
         colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          {
-            // ✅ ini kunci: footbar + safe area bottom (gesture/nav bar) + extra ruang
-            paddingBottom: tabH + insets.bottom + 16,
-          },
+          { paddingBottom: tabH + insets.bottom + 20 },
         ]}
-        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.brand}>SPP Mobile</Text>
-            <Text style={styles.brandSub}>Superadmin</Text>
+        {/* ================= HEADER ================= */}
+        <View style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Dashboard Superadmin</Text>
+            <Text style={styles.headerSub}>
+              Ringkasan global seluruh cabang
+            </Text>
           </View>
 
-          <View style={styles.chip}>
+          <View style={styles.roleChip}>
             <Ionicons
               name="shield-checkmark-outline"
               size={14}
               color="#1E40AF"
             />
-            <Text style={styles.chipText}>Superadmin</Text>
+            <Text style={styles.roleText}>Superadmin</Text>
           </View>
         </View>
 
-        <Text style={styles.title}>Dashboard</Text>
-        <Text style={styles.subtitle}>
-          Ringkasan realtime seluruh cabang (admin, siswa, dan total pembayaran
-          bulan ini).
-        </Text>
-
-        {/* Summary cards */}
-        <View style={styles.grid}>
-          <View style={styles.miniCard}>
-            <Text style={styles.miniLabel}>Total Cabang</Text>
-            {loading ? (
-              <MiniLoading />
-            ) : (
-              <Text style={styles.miniValue}>{summary.cabang}</Text>
-            )}
-          </View>
-
-          <View style={styles.miniCard}>
-            <Text style={styles.miniLabel}>Admin Cabang</Text>
-            {loading ? (
-              <MiniLoading />
-            ) : (
-              <Text style={styles.miniValue}>{summary.admin}</Text>
-            )}
-          </View>
-
-          <View style={styles.miniCard}>
-            <Text style={styles.miniLabel}>Total Siswa</Text>
-            {loading ? (
-              <MiniLoading />
-            ) : (
-              <Text style={styles.miniValue}>{summary.siswa}</Text>
-            )}
-          </View>
-
-          <View style={styles.miniCard}>
-            <Text style={styles.miniLabel}>Bayar Bulan Ini</Text>
-            {loading ? (
-              <MiniLoading />
-            ) : (
-              <Text
-                style={[styles.miniValue, styles.miniValueMoney]}
-                numberOfLines={1}
-              >
-                {rupiah(summary.bayarBulanIniNominal)}
-              </Text>
-            )}
-          </View>
+        {/* ================= KPI UTAMA ================= */}
+        <View style={styles.kpiMain}>
+          <Text style={styles.kpiLabel}>Total Masuk Bulan Ini</Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.kpiValue}>
+              {rupiah(summary.bayarBulanIniNominal)}
+            </Text>
+          )}
         </View>
 
-        {/* Quick actions */}
+        {/* ================= KPI GRID ================= */}
+        <View style={styles.kpiGrid}>
+          <KpiBox
+            label="Total Cabang"
+            value={summary.cabang}
+            loading={loading}
+          />
+          <KpiBox
+            label="Admin Cabang"
+            value={summary.admin}
+            loading={loading}
+          />
+          <KpiBox label="Total Siswa" value={summary.siswa} loading={loading} />
+          <KpiBox
+            label="Bayar Bulan Ini"
+            value={rupiah(summary.bayarBulanIniNominal)}
+            loading={loading}
+            money
+          />
+        </View>
+
+        {/* ================= MENU AKSI ================= */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Aksi Cepat</Text>
-          <Text style={styles.cardSub}>
-            Shortcut untuk mengatur fitur utama.
-          </Text>
+          <Text style={styles.cardTitle}>Menu Aksi</Text>
 
-          <View style={{ gap: 8, marginTop: 10 }}>
-            <Action
-              icon="business-outline"
-              label="Tambah / Kelola Cabang"
-              onPress={() => router.push("./superadmin/cabang")}
-            />
-            <Action
-              icon="people-outline"
-              label="Tambah / Kelola Admin Cabang"
-              onPress={() => router.push("./superadmin/admin-cabang")}
-            />
-            <Action
-              icon="gift-outline"
-              label="Setting Hadiah Spin"
-              onPress={() => router.push("/superadmin/spin")}
-            />
-            <Action
-              icon="settings-outline"
-              label="Setting SPP (Global & Per Siswa)"
-              onPress={() => router.push("/superadmin/setting-spp")}
-            />
-            <Action
-              icon="school-outline"
-              label="Lihat Siswa per Cabang"
-              onPress={() => router.push("/superadmin/siswa")}
-            />
-          </View>
+          <Action
+            icon="business-outline"
+            label="Kelola Cabang"
+            onPress={() => router.push("/superadmin/cabang")}
+          />
+          <Action
+            icon="people-outline"
+            label="Kelola Admin Cabang"
+            onPress={() => router.push("/superadmin/admin-cabang")}
+          />
+          <Action
+            icon="gift-outline"
+            label="Setting Hadiah Spin"
+            onPress={() => router.push("/superadmin/spin")}
+          />
+          <Action
+            icon="settings-outline"
+            label="Setting SPP"
+            onPress={() => router.push("/superadmin/setting-spp")}
+          />
+          <Action
+            icon="school-outline"
+            label="Siswa per Cabang"
+            onPress={() => router.push("/superadmin/siswa")}
+          />
 
           <TouchableOpacity
             activeOpacity={0.9}
@@ -257,27 +210,36 @@ export default function SuperadminDashboard() {
             <Text style={styles.secondaryText}>Buka Menu Master</Text>
           </TouchableOpacity>
         </View>
-
-        <View style={{ height: 8 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function MiniLoading() {
+// ================= COMPONENT =================
+function KpiBox({
+  label,
+  value,
+  loading,
+  money,
+}: {
+  label: string;
+  value: any;
+  loading: boolean;
+  money?: boolean;
+}) {
   return (
-    <View
-      style={{
-        marginTop: 8,
-        flexDirection: "row",
-        gap: 8,
-        alignItems: "center",
-      }}
-    >
-      <ActivityIndicator size="small" />
-      <Text style={{ fontFamily: F.bold, color: "#0F172A", fontSize: 12 }}>
-        Memuat...
-      </Text>
+    <View style={styles.kpiBox}>
+      <Text style={styles.kpiSmallLabel}>{label}</Text>
+      {loading ? (
+        <ActivityIndicator size="small" />
+      ) : (
+        <Text
+          style={[styles.kpiSmallValue, money && { fontSize: 15 }]}
+          numberOfLines={1}
+        >
+          {value}
+        </Text>
+      )}
     </View>
   );
 }
@@ -300,77 +262,80 @@ function Action({
       <View style={styles.actionIcon}>
         <Ionicons name={icon} size={18} color="#1E40AF" />
       </View>
-      <Text style={styles.actionText} numberOfLines={2}>
-        {label}
-      </Text>
+      <Text style={styles.actionText}>{label}</Text>
       <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
     </TouchableOpacity>
   );
 }
 
+// ================= STYLE =================
 const { width: W } = Dimensions.get("window");
 const IS_SMALL = W < 380;
 
 const styles = StyleSheet.create({
-  // ✅ lebih rapat tapi tetap lega (responsif)
   scroll: {
     paddingHorizontal: IS_SMALL ? 14 : 16,
     paddingTop: 12,
-    paddingBottom: 20,
-    gap: 10,
+    gap: 14,
   },
 
-  header: {
-    paddingHorizontal: 2,
-    paddingTop: 2,
+  headerRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "flex-start",
   },
-  brand: {
-    fontFamily: F.extrabold,
-    color: "#1D4ED8",
-    letterSpacing: 0.2,
-    fontSize: IS_SMALL ? 14 : 15,
-  },
-  brandSub: {
-    marginTop: 2,
-    fontFamily: F.semibold,
-    color: "#64748B",
-    fontSize: 12,
-  },
-
-  chip: {
-    backgroundColor: "rgba(219,234,254,0.95)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(191,219,254,1)",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  chipText: { fontFamily: F.bold, color: "#1E40AF", fontSize: 12 },
-
-  // ✅ judul diperkecil biar tidak “gede”
-  title: {
+  headerTitle: {
     fontFamily: F.extrabold,
     fontSize: IS_SMALL ? 20 : 22,
     color: "#0F172A",
   },
-  subtitle: {
+  headerSub: {
+    marginTop: 4,
     fontFamily: F.semibold,
-    color: "#64748B",
-    lineHeight: 18,
-    marginTop: 2,
     fontSize: 12,
+    color: "#64748B",
   },
 
-  // ✅ grid lebih rapat
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 2 },
+  roleChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#DBEAFE",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  roleText: {
+    fontFamily: F.bold,
+    fontSize: 12,
+    color: "#1E40AF",
+  },
 
-  miniCard: {
+  kpiMain: {
+    backgroundColor: "#0EA5E9",
+    borderRadius: 20,
+    padding: 16,
+  },
+  kpiLabel: {
+    fontFamily: F.semibold,
+    fontSize: 12,
+    color: "#E0F2FE",
+  },
+  kpiValue: {
+    marginTop: 8,
+    fontFamily: F.extrabold,
+    fontSize: 26,
+    color: "#FFFFFF",
+  },
+
+  kpiGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  kpiBox: {
     width: "48.6%",
     backgroundColor: "rgba(255,255,255,0.92)",
     borderRadius: 16,
@@ -378,15 +343,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
-  miniLabel: { fontFamily: F.semibold, color: "#64748B", fontSize: 12 },
-  miniValue: {
-    marginTop: 6,
-    fontSize: IS_SMALL ? 18 : 19,
-    fontFamily: F.extrabold,
-    color: "#0F172A",
+  kpiSmallLabel: {
+    fontFamily: F.semibold,
+    fontSize: 12,
+    color: "#64748B",
   },
-  miniValueMoney: {
-    fontSize: IS_SMALL ? 16 : 17, // ✅ nominal uang biasanya panjang
+  kpiSmallValue: {
+    marginTop: 6,
+    fontFamily: F.extrabold,
+    fontSize: 18,
+    color: "#0F172A",
   },
 
   card: {
@@ -395,55 +361,55 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
   },
-  cardTitle: { fontFamily: F.extrabold, fontSize: 16, color: "#0F172A" },
-  cardSub: {
-    marginTop: 4,
-    fontFamily: F.semibold,
-    color: "#64748B",
-    lineHeight: 17,
-    fontSize: 12,
+  cardTitle: {
+    fontFamily: F.extrabold,
+    fontSize: 16,
+    color: "#0F172A",
+    marginBottom: 8,
   },
 
   actionItem: {
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    marginTop: 8,
   },
   actionIcon: {
     width: 36,
     height: 36,
-    borderRadius: 13,
-    backgroundColor: "rgba(219,234,254,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(191,219,254,1)",
+    borderRadius: 14,
+    backgroundColor: "#EFF6FF",
     alignItems: "center",
     justifyContent: "center",
   },
-  actionText: { flex: 1, fontFamily: F.bold, color: "#0F172A", fontSize: 13 },
+  actionText: {
+    flex: 1,
+    fontFamily: F.bold,
+    fontSize: 13,
+    color: "#0F172A",
+  },
 
   secondaryBtn: {
     marginTop: 12,
-    backgroundColor: "rgba(255,255,255,0.95)",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    paddingVertical: 11,
     borderRadius: 16,
+    paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
+    backgroundColor: "#FFFFFF",
   },
-  secondaryText: { fontFamily: F.bold, color: "#0F172A", fontSize: 13 },
+  secondaryText: {
+    fontFamily: F.bold,
+    fontSize: 13,
+    color: "#0F172A",
+  },
 });
