@@ -1,40 +1,40 @@
 // FILE: app/admin/siswa.tsx
+import { Ionicons } from "@expo/vector-icons";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Platform,
   ScrollView,
+  StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  Platform,
-  Alert,
-  ActivityIndicator,
-  Modal,
-  Image,
+  View,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 
 // ✅ Firebase
-import { auth, db } from "../../firebase";
 import {
   collection,
   doc,
   getDoc,
+  limit,
   onSnapshot,
   orderBy,
   query,
-  where,
-  limit,
   Timestamp,
+  where,
 } from "firebase/firestore";
+import { auth, db } from "../../firebase";
 
 type Student = {
   id: string;
@@ -97,6 +97,25 @@ function monthLabelFromMonthKey(monthKey: string) {
   }
   const d = new Date(y, m - 1, 1);
   return bulanIndo(d);
+}
+
+function DetailRow({
+  label,
+  value,
+  bold,
+}: {
+  label: string;
+  value: string;
+  bold?: boolean;
+}) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={[styles.detailValue, bold && { fontWeight: "900" }]}>
+        {value}
+      </Text>
+    </View>
+  );
 }
 
 export default function TabSiswa() {
@@ -164,7 +183,7 @@ export default function TabSiswa() {
         if (!bid) {
           Alert.alert(
             "Cabang belum diset",
-            "Akun admin ini belum punya cabangId/branchId. Set dulu dari SUPERADMIN."
+            "Akun admin ini belum punya cabangId/branchId. Set dulu dari SUPERADMIN.",
           );
           if (mounted) {
             setBranchId("");
@@ -182,7 +201,7 @@ export default function TabSiswa() {
             setBranchName(String(b.name || b.branchName || "-").trim() || "-");
           } else {
             setBranchName(
-              String(data.branchName || data.cabangName || "-") || "-"
+              String(data.branchName || data.cabangName || "-") || "-",
             );
           }
         }
@@ -210,7 +229,7 @@ export default function TabSiswa() {
     const qRef = query(
       collection(db, "students"),
       where("branchId", "==", branchId),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
 
     const unsub = onSnapshot(
@@ -224,10 +243,10 @@ export default function TabSiswa() {
             type === "Pertemuan"
               ? "Pertemuan (8x)"
               : type === "Beasiswa 0"
-              ? "Beasiswa 0"
-              : type === "Beasiswa 100"
-              ? "Beasiswa 100"
-              : "Normal";
+                ? "Beasiswa 0"
+                : type === "Beasiswa 100"
+                  ? "Beasiswa 100"
+                  : "Normal";
 
           return {
             id: d.id,
@@ -251,7 +270,7 @@ export default function TabSiswa() {
         console.log(err);
         setLoadingSiswa(false);
         Alert.alert("Gagal", "Tidak bisa mengambil data siswa.");
-      }
+      },
     );
 
     return () => unsub();
@@ -270,7 +289,7 @@ export default function TabSiswa() {
       where("branchId", "==", branchId),
       where("studentId", "==", selected.id),
       orderBy("paidAt", "desc"),
-      limit(36)
+      limit(36),
     );
 
     const unsub = onSnapshot(
@@ -282,8 +301,8 @@ export default function TabSiswa() {
           const paidAt: Date | null = data?.paidAt?.toDate
             ? data.paidAt.toDate()
             : data?.paidAt instanceof Timestamp
-            ? data.paidAt.toDate()
-            : null;
+              ? data.paidAt.toDate()
+              : null;
 
           const monthKey = String(data.monthKey || "");
           const bulan = monthKey ? monthLabelFromMonthKey(monthKey) : "-";
@@ -316,7 +335,7 @@ export default function TabSiswa() {
         // ✅ FIX: jangan munculkan alert index / popup apa pun.
         console.log("mutasi payments error:", err?.code, err?.message);
         setLoadingHistory(false);
-      }
+      },
     );
 
     return () => unsub();
@@ -577,27 +596,44 @@ export default function TabSiswa() {
               </Text>
             ) : (
               <>
-                <View style={{ marginTop: 12 }}>
-                  <Image
-                    source={{ uri: previewItem.proofDataUrl }}
-                    style={styles.previewImg}
-                  />
-                </View>
+                <>
+                  {/* Thumbnail bukti */}
+                  <View style={styles.proofWrap}>
+                    <Image
+                      source={{ uri: previewItem.proofDataUrl }}
+                      style={styles.proofImg}
+                      resizeMode="contain"
+                    />
+                  </View>
 
-                <View style={styles.previewMeta}>
-                  <Text style={styles.previewMetaText}>
-                    <Text style={{ fontWeight: "900" }}>
-                      {selected?.name || "-"}
-                    </Text>
-                    {"\n"}
-                    {previewItem.bulan} • {previewItem.metode}
-                    {"\n"}
-                    {previewItem.tanggalBayar}{" "}
-                    {previewItem.jamBayar !== "-"
-                      ? `• ${previewItem.jamBayar}`
-                      : ""}
-                  </Text>
-                </View>
+                  {/* Detail pembayaran */}
+                  <View style={styles.detailCard}>
+                    <DetailRow label="Nama" value={selected?.name || "-"} />
+                    <DetailRow label="Periode" value={previewItem.bulan} />
+                    <DetailRow
+                      label="Tanggal"
+                      value={`${previewItem.tanggalBayar}${
+                        previewItem.jamBayar !== "-"
+                          ? ` • ${previewItem.jamBayar}`
+                          : ""
+                      }`}
+                    />
+                    <DetailRow label="Metode" value={previewItem.metode} />
+                    <DetailRow
+                      label="Nominal"
+                      value={`Rp ${previewItem.nominal.toLocaleString("id-ID")}`}
+                    />
+                    <DetailRow
+                      label="Potongan"
+                      value={`Rp ${previewItem.potonganSpin.toLocaleString("id-ID")}`}
+                    />
+                    <DetailRow
+                      label="Dibayar"
+                      value={`Rp ${previewItem.dibayar.toLocaleString("id-ID")}`}
+                      bold
+                    />
+                  </View>
+                </>
               </>
             )}
           </View>
@@ -608,6 +644,53 @@ export default function TabSiswa() {
 }
 
 const styles = StyleSheet.create({
+  proofWrap: {
+    marginTop: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  proofImg: {
+    width: "100%",
+    maxWidth: 220,
+    height: 220,
+    borderRadius: 12,
+  },
+
+  detailCard: {
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    gap: 8,
+  },
+
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  detailLabel: {
+    color: "#64748B",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+
+  detailValue: {
+    color: "#0F172A",
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
   scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
 
   header: {

@@ -1,32 +1,31 @@
 // FILE: app/admin/riwayat.tsx
-import React, { useMemo, useState, useEffect } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Platform,
-  Modal,
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 
 // ✅ Safe Area + TabBar height (untuk samakan jarak)
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 
 // ✅ DatePicker
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 // ✅ Firebase
-import { auth, db } from "../../firebase";
 import {
   collection,
   doc,
@@ -34,9 +33,10 @@ import {
   onSnapshot,
   orderBy,
   query,
-  where,
   Timestamp,
+  where,
 } from "firebase/firestore";
+import { auth, db } from "../../firebase";
 
 type Tx = {
   id: string;
@@ -98,6 +98,25 @@ function monthLabelFromKey(yyyyMM?: string) {
   return bulanIndo(new Date(y, m - 1, 1));
 }
 
+function DetailRow({
+  label,
+  value,
+  bold,
+}: {
+  label: string;
+  value: string;
+  bold?: boolean;
+}) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={[styles.detailValue, bold && { fontWeight: "900" }]}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 export default function AdminRiwayatTab() {
   const insets = useSafeAreaInsets();
   const tabH = useBottomTabBarHeight();
@@ -149,7 +168,7 @@ export default function AdminRiwayatTab() {
         if (!bid) {
           Alert.alert(
             "Cabang belum diset",
-            "Akun admin ini belum punya cabangId/branchId. Set dulu dari SUPERADMIN."
+            "Akun admin ini belum punya cabangId/branchId. Set dulu dari SUPERADMIN.",
           );
           if (mounted) {
             setBranchId("");
@@ -167,7 +186,7 @@ export default function AdminRiwayatTab() {
           setBranchName(String(b.name || b.branchName || "-").trim() || "-");
         } else {
           setBranchName(
-            String(data.branchName || data.cabangName || "-") || "-"
+            String(data.branchName || data.cabangName || "-") || "-",
           );
         }
       } catch (e: any) {
@@ -188,7 +207,7 @@ export default function AdminRiwayatTab() {
   // =========================
   const today = new Date();
   const [fromDate, setFromDate] = useState<Date>(
-    new Date(today.getFullYear(), today.getMonth(), 1)
+    new Date(today.getFullYear(), today.getMonth(), 1),
   );
   const [toDate, setToDate] = useState<Date>(today);
 
@@ -197,7 +216,7 @@ export default function AdminRiwayatTab() {
 
   // Android: modal picker
   const [androidPicker, setAndroidPicker] = useState<null | "from" | "to">(
-    null
+    null,
   );
 
   // filter aktif
@@ -237,9 +256,7 @@ export default function AdminRiwayatTab() {
     const qRef = query(
       collection(db, "payments"),
       where("branchId", "==", branchId),
-      where("paidAt", ">=", fTs),
-      where("paidAt", "<=", tTs),
-      orderBy("paidAt", "desc")
+      orderBy("paidAt", "desc"),
     );
 
     const unsub = onSnapshot(
@@ -260,8 +277,8 @@ export default function AdminRiwayatTab() {
             rawStatus !== "PAID"
               ? "Pending"
               : total <= 0 || nominal <= 0
-              ? "Beasiswa"
-              : "Lunas";
+                ? "Beasiswa"
+                : "Lunas";
 
           const metode: Tx["metode"] =
             String(data.metode || "Cash") === "Transfer" ? "Transfer" : "Cash";
@@ -294,7 +311,7 @@ export default function AdminRiwayatTab() {
         // ✅ FIX: Tidak tampil warning apa pun
         console.log("riwayat onSnapshot error:", err?.code, err?.message);
         setLoadingTx(false);
-      }
+      },
     );
 
     return () => unsub();
@@ -528,8 +545,8 @@ export default function AdminRiwayatTab() {
                                 x.status === "Lunas"
                                   ? styles.badgeOk
                                   : x.status === "Beasiswa"
-                                  ? styles.badgeInfo
-                                  : styles.badgeWarn,
+                                    ? styles.badgeInfo
+                                    : styles.badgeWarn,
                               ]}
                             >
                               <Text style={styles.badgeText2}>{x.status}</Text>
@@ -589,21 +606,24 @@ export default function AdminRiwayatTab() {
               </Text>
             ) : (
               <>
-                <View style={{ marginTop: 12 }}>
+                <View style={styles.proofWrap}>
                   <Image
                     source={{ uri: previewTx.proofDataUrl }}
-                    style={styles.previewImg}
+                    style={styles.proofImg}
+                    resizeMode="contain"
                   />
                 </View>
 
-                <View style={styles.previewMeta}>
-                  <Text style={styles.previewMetaText}>
-                    <Text style={{ fontWeight: "900" }}>{previewTx.nama}</Text>
-                    {"\n"}
-                    {previewTx.bulan} • {previewTx.metode}
-                    {"\n"}
-                    {formatTanggal(previewTx.tanggal)}
-                  </Text>
+                {/* Detail transaksi */}
+                <View style={styles.detailCard}>
+                  <DetailRow label="Nama" value={previewTx.nama} />
+                  <DetailRow label="Periode" value={previewTx.bulan} />
+                  <DetailRow
+                    label="Tanggal"
+                    value={formatTanggal(previewTx.tanggal)}
+                  />
+                  <DetailRow label="Metode" value={previewTx.metode} />
+                  <DetailRow label="Status" value={previewTx.status} bold />
                 </View>
               </>
             )}
@@ -669,6 +689,53 @@ export default function AdminRiwayatTab() {
 }
 
 const styles = StyleSheet.create({
+  proofWrap: {
+    marginTop: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  proofImg: {
+    width: "100%",
+    maxWidth: 220,
+    height: 220,
+    borderRadius: 12,
+  },
+
+  detailCard: {
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    padding: 12,
+    gap: 8,
+  },
+
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+
+  detailLabel: {
+    color: "#64748B",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+
+  detailValue: {
+    color: "#0F172A",
+    fontWeight: "800",
+    fontSize: 12,
+  },
+
   scroll: {
     paddingHorizontal: 18,
     paddingTop: 16,
