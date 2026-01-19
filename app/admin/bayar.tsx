@@ -285,6 +285,23 @@ async function makeProofDataUrl(
   return { dataUrl, uri: manip.uri, mime: "image/jpeg", bytesApprox };
 }
 
+function InvoiceRow({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <View style={styles.invRowSimple}>
+      <Text style={styles.invLabel}>{label}</Text>
+      <Text style={[styles.invValue, strong && { fontSize: 16 }]}>{value}</Text>
+    </View>
+  );
+}
+
 export default function BayarSPP() {
   const insets = useSafeAreaInsets();
 
@@ -1427,8 +1444,8 @@ export default function BayarSPP() {
           <Text style={{ fontWeight: "900", color: THEME.text }}>
             {branchName}
           </Text>
-          {"\n"}Klik siswa → pilih bulan → invoice → (spin jika eligible) →
-          bayar.
+          {/* {"\n"}Klik siswa → pilih bulan → invoice → (spin jika eligible) →
+          bayar. */}
         </Text>
 
         <View style={styles.searchWrap}>
@@ -1487,10 +1504,10 @@ export default function BayarSPP() {
 
         <Text style={styles.note}>
           ℹ️ Jika bayar sebelum tanggal {sebelumTanggal}, tombol Spin terbuka.
-          {"\n"}✅ Spin sekarang{" "}
+          {/* {"\n"}✅ Spin sekarang{" "}
           <Text style={{ fontWeight: "900" }}>mengikuti pilihan bulan</Text>:
           jumlah spin = (bulan dipilih - 1).{"\n"}Contoh: pilih Jan+Feb+Mar ⇒
-          Spin 2x: untuk Feb lalu Mar.
+          Spin 2x: untuk Feb lalu Mar. */}
         </Text>
 
         <View style={{ height: Platform.OS === "ios" ? 8 : 16 }} />
@@ -1748,21 +1765,32 @@ export default function BayarSPP() {
                 )}
 
                 {/* meta */}
-                <View style={styles.invMetaCard}>
-                  <View style={styles.invMetaRow}>
-                    <Text style={styles.invMetaK}>Bulan Tagihan</Text>
-                    <Text style={styles.invMetaV}>
-                      {invoiceDraft.monthLabels.join(", ")}
-                    </Text>
-                  </View>
-                  <View style={styles.invMetaRow}>
-                    <Text style={styles.invMetaK}>Tanggal / Jam</Text>
-                    <Text style={styles.invMetaV}>
-                      {invoiceDraft.status === "PAID"
+                <View style={styles.invSummaryCard}>
+                  <InvoiceRow
+                    label="Nama Siswa"
+                    value={invoiceDraft.studentName}
+                  />
+                  <InvoiceRow label="Cabang" value={invoiceDraft.branchName} />
+                  <InvoiceRow
+                    label="Periode"
+                    value={invoiceDraft.monthLabels.join(", ")}
+                  />
+                  <InvoiceRow
+                    label="Tanggal"
+                    value={
+                      invoiceDraft.status === "PAID"
                         ? invoiceDraft.paidAtText || "-"
-                        : formatTanggalJam(invoiceDraft.createdAtLocal)}
-                    </Text>
-                  </View>
+                        : formatTanggalJam(invoiceDraft.createdAtLocal)
+                    }
+                  />
+
+                  <View style={styles.divSolid} />
+
+                  <InvoiceRow
+                    label="Total Tagihan"
+                    value={rupiah(invoiceDraft.total)}
+                    strong
+                  />
                 </View>
 
                 {/* ✅ SPIN STEP-BY-STEP */}
@@ -1882,11 +1910,11 @@ export default function BayarSPP() {
                             </View>
                           )}
 
-                          <Text style={[styles.note, { marginTop: 8 }]}>
+                          {/* <Text style={[styles.note, { marginTop: 8 }]}>
                             * Contoh: Jan+Feb+Mar ⇒ Spin 2x: untuk Feb lalu Mar.
                             {"\n"}* Setelah spin, potongan langsung masuk ke
                             rincian invoice (lihat potongan Feb & Mar).
-                          </Text>
+                          </Text> */}
                         </>
                       );
                     })()}
@@ -1953,7 +1981,9 @@ export default function BayarSPP() {
 
                 {/* ✅ rincian (detail per bulan: termasuk potongan Feb & Mar) */}
                 <View style={styles.invBox}>
-                  <Text style={styles.invSectionTitle}>Rincian</Text>
+                  <Text style={styles.invSectionMuted}>
+                    Rincian Pembayaran (Opsional)
+                  </Text>
 
                   <View style={styles.divDashed} />
 
@@ -2304,6 +2334,41 @@ export default function BayarSPP() {
 }
 
 const styles = StyleSheet.create({
+  invSummaryCard: {
+    marginTop: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+    backgroundColor: "#F8FAFC",
+    padding: 14,
+  },
+
+  invRowSimple: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  invLabel: {
+    color: "#64748B",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+
+  invValue: {
+    color: "#0F172A",
+    fontWeight: "900",
+    fontSize: 13,
+  },
+
+  invSectionMuted: {
+    marginTop: 12,
+    fontWeight: "900",
+    color: "#475569",
+    fontSize: 12,
+  },
+
   scroll: { padding: 18, paddingBottom: 28 },
 
   brand: { color: "#2563EB", fontWeight: "900", letterSpacing: 0.3 },

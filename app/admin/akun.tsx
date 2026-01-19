@@ -1,27 +1,27 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
   ActivityIndicator,
+  Alert,
   Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 
 // ✅ Firebase
-import { auth, db } from "../../firebase";
-import { doc, getDoc } from "firebase/firestore";
 import { signOut as signOutAuth } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../../firebase";
 
 // ✅ Inter font map
 const F = {
@@ -239,10 +239,10 @@ export default function TabAkun() {
                 <Text style={styles.logoutText}>Logout</Text>
               </TouchableOpacity>
 
-              <Text style={styles.note}>
+              {/* <Text style={styles.note}>
                 * Data diambil dari Firestore (users/{profile.uid} + branches/
                 {profile.branchId || "-"}).
-              </Text>
+              </Text> */}
             </>
           )}
         </View>
