@@ -30,14 +30,14 @@ import * as ImageManipulator from "expo-image-manipulator";
 import {
   collection,
   doc,
-  getDoc,
-  getDocs, // ✅ TAMBAH
+  getDoc, // ✅ TAMBAH
   query, // ✅ TAMBAH
   runTransaction,
   serverTimestamp, // ✅ TAMBAH
-  where, // ✅ TAMBAH
+  where,
 } from "firebase/firestore";
 
+import { onSnapshot } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
 const THEME = {
@@ -514,20 +514,17 @@ export default function BayarSPP() {
   useEffect(() => {
     if (!branchId) return;
 
-    let mounted = true;
+    setStudentLoading(true);
 
-    (async () => {
-      try {
-        setStudentLoading(true);
+    const q = query(
+      collection(db, "students"),
+      where("branchId", "==", branchId),
+      where("active", "==", true),
+    );
 
-        const q = query(
-          collection(db, "students"),
-          where("branchId", "==", branchId),
-          where("active", "==", true),
-        );
-
-        const snap = await getDocs(q);
-
+    const unsubscribe = onSnapshot(
+      q,
+      (snap) => {
         const rows: Student[] = snap.docs.map((d) => {
           const data = d.data() as any;
           return {
@@ -535,26 +532,22 @@ export default function BayarSPP() {
             name: String(data.name || "").trim(),
             type: data.type || "Normal",
             spp: Number(data.spp ?? data.sppDefault ?? 0),
-
             pertemuan: data.pertemuan,
             active: data.active !== false,
           };
         });
 
-        if (mounted) {
-          setStudents(rows);
-        }
-      } catch (e) {
-        console.log("❌ load students error:", e);
-        if (mounted) setStudents([]);
-      } finally {
-        if (mounted) setStudentLoading(false); // ✅ INI KUNCI
-      }
-    })();
+        setStudents(rows);
+        setStudentLoading(false);
+      },
+      (error) => {
+        console.log("❌ realtime students error:", error);
+        setStudents([]);
+        setStudentLoading(false);
+      },
+    );
 
-    return () => {
-      mounted = false;
-    };
+    return () => unsubscribe();
   }, [branchId]);
 
   // ===================== SEARCH =====================

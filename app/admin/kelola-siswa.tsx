@@ -148,9 +148,13 @@ export default function KelolaSiswaAdmin() {
 
   /* ===================== DEFAULT SPP ===================== */
   useEffect(() => {
-    if (type === "Reguler") setSppDefault((v) => v || rupiah(200000));
-    else if (type === "Beasiswa 0") setSppDefault(rupiah(0));
-    else if (type === "Beasiswa 100") setSppDefault(rupiah(100000));
+    if (type === "Reguler") {
+      setSppDefault(rupiah(200000));
+    } else if (type === "Beasiswa 0") {
+      setSppDefault(rupiah(0));
+    } else if (type === "Beasiswa 100") {
+      setSppDefault(rupiah(100000));
+    }
   }, [type]);
 
   /* ===================== ADD ===================== */
@@ -237,18 +241,22 @@ export default function KelolaSiswaAdmin() {
 
           {showForm && (
             <>
+              <Text style={styles.formLabel}>Nama Siswa</Text>
               <TextInput
-                placeholder="Nama siswa"
+                placeholder="Contoh: Ahmad Fauzi"
                 value={name}
                 onChangeText={setName}
                 style={styles.input}
               />
 
+              <Text style={styles.formLabel}>Tipe Siswa</Text>
               <TouchableOpacity
                 style={styles.select}
                 onPress={() => setTypePickerOpen(true)}
+                activeOpacity={0.8}
               >
-                <Text>{type}</Text>
+                <Text style={{ fontFamily: F.semibold }}>{type}</Text>
+                <Ionicons name="chevron-down" size={18} color="#64748B" />
               </TouchableOpacity>
 
               <TextInput
@@ -364,7 +372,10 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
     borderRadius: 14,
     padding: 12,
-    marginTop: 10,
+    marginTop: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
 
   primaryBtn: {
@@ -425,5 +436,12 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: 1,
     borderColor: "#E2E8F0",
+  },
+  formLabel: {
+    marginTop: 12,
+    marginBottom: 4,
+    fontSize: 12,
+    color: "#475569",
+    fontFamily: F.semibold,
   },
 });
