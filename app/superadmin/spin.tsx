@@ -359,7 +359,12 @@ export default function SpinSettingPage() {
         </View>
 
         <View style={styles.card}>
-          {loading ? (
+          {!branchId ? (
+            // ⛔ BELUM PILIH UNIT
+            <Text style={styles.note}>
+              Silakan pilih unit terlebih dahulu untuk mengatur spin 🎯
+            </Text>
+          ) : loading ? (
             <Text style={styles.note}>Memuat setting...</Text>
           ) : (
             <>
@@ -551,9 +556,9 @@ export default function SpinSettingPage() {
                 </Text>
               </TouchableOpacity>
 
-              <Text style={styles.note}>
+              {/* <Text style={styles.note}>
                 * Setting ini tersimpan per unit (spin_settings/{branchId})
-              </Text>
+              </Text> */}
             </>
           )}
         </View>
