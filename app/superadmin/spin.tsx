@@ -34,7 +34,8 @@ type Hadiah = {
   label: string;
   nominal: number;
   peluang: number;
-  kuota: number; // 0 = unlimited (bebas)
+  kuota?: number | "-"; // ⬅️ PENTING
+  _kuotaAwal?: number | "-";
 };
 
 // const DOC_PATH = { col: "spin_settings", id: "global" };
@@ -49,6 +50,11 @@ const F = {
 function toInt(v: string, fallback = 0) {
   const n = Number(String(v || "").replace(/[^\d]/g, ""));
   return Number.isFinite(n) ? n : fallback;
+}
+
+function getMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export default function SpinSettingPage() {
@@ -156,38 +162,95 @@ export default function SpinSettingPage() {
       try {
         if (!branchId) return;
 
-        setItems([]);
         setLoading(true);
 
-        const ref = doc(db, "spin_settings", branchId);
-        const snap = await getDoc(ref);
+        // ===================== 🅰️ LOAD HADIAH GLOBAL =====================
+        const globalRef = doc(db, "spin_settings", "global");
+        const globalSnap = await getDoc(globalRef);
 
-        if (snap.exists()) {
-          const data = snap.data() as any;
-
-          const st = String(data.sebelumTanggal ?? "11");
-          const dipakai = data.dipakaiBulanDepan !== false;
-
-          const hadiahRaw = Array.isArray(data.hadiah) ? data.hadiah : [];
-          const hadiah: Hadiah[] =
-            hadiahRaw.length > 0
-              ? hadiahRaw.map((h: any, idx: number) => ({
-                  id: String(h.id || `H${idx + 1}`),
-                  label: String(h.label || ""),
-                  nominal: Number(h.nominal || 0),
-                  peluang: Number(h.peluang || 0),
-                  kuota: Number.isFinite(Number(h.kuota)) ? Number(h.kuota) : 0,
-                }))
-              : [];
-
-          setSebelumTanggal(st);
-          setDipakaiBulanDepan(dipakai);
-          setItems(hadiah);
-        } else {
-          // ⬇️ TAMBAHKAN INI
+        if (!globalSnap.exists()) {
           setItems([]);
+          return;
         }
-      } catch (e: any) {
+
+        const globalData = globalSnap.data() as any;
+        const hadiahTemplate = Array.isArray(globalData.hadiahTemplate)
+          ? globalData.hadiahTemplate
+          : [];
+
+        setSebelumTanggal(String(globalData.sebelumTanggal ?? "11"));
+        setDipakaiBulanDepan(globalData.dipakaiBulanDepan !== false);
+
+        // ===================== 🅱️ LOAD KUOTA PER UNIT (STRICT) =====================
+        const kuotaRef = doc(db, "spin_kuota", branchId);
+        const kuotaSnap = await getDoc(kuotaRef);
+
+        if (!kuotaSnap.exists()) {
+          Alert.alert(
+            "Kuota belum diset",
+            "Silakan set kuota voucher di Superadmin terlebih dahulu.",
+          );
+          setItems([]);
+          return;
+        }
+
+        const kd = kuotaSnap.data() as any;
+
+        if (!Array.isArray(kd.kuota) || kd.kuota.length === 0) {
+          Alert.alert(
+            "Kuota kosong",
+            "Kuota voucher untuk unit ini masih kosong. Silakan set ulang di Superadmin.",
+          );
+          setItems([]);
+          return;
+        }
+
+        const nowMonth = getMonthKey();
+        let kuotaMap: Record<string, { kuota: number; kuotaAwal: number }> = {};
+
+        // 🔁 reset bulanan (jika perlu)
+        if (kd.lastResetMonth !== nowMonth) {
+          kd.kuota.forEach((k: any) => {
+            kuotaMap[k.id] = {
+              kuota: k.kuotaAwal,
+              kuotaAwal: k.kuotaAwal,
+            };
+          });
+
+          await setDoc(
+            kuotaRef,
+            {
+              kuota: Object.entries(kuotaMap).map(([id, v]) => ({
+                id,
+                kuota: v.kuota,
+                kuotaAwal: v.kuotaAwal,
+              })),
+              lastResetMonth: nowMonth,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+        } else {
+          kd.kuota.forEach((k: any) => {
+            kuotaMap[k.id] = {
+              kuota: k.kuota,
+              kuotaAwal: k.kuotaAwal,
+            };
+          });
+        }
+
+        // ===================== 🅲 GABUNG (GLOBAL + UNIT) =====================
+        const mergedItems: Hadiah[] = hadiahTemplate.map((h: any) => ({
+          id: h.id,
+          label: h.label,
+          nominal: Number(h.nominal || 0),
+          peluang: Number(h.peluang || 0),
+          kuota: kuotaMap[h.id]?.kuota ?? 0,
+          _kuotaAwal: kuotaMap[h.id]?.kuotaAwal ?? 0,
+        }));
+
+        setItems(mergedItems);
+      } catch (e) {
         console.log(e);
         Alert.alert("Gagal", "Tidak bisa memuat setting spin.");
       } finally {
@@ -201,18 +264,35 @@ export default function SpinSettingPage() {
     const l = label.trim();
     const n = toInt(nominal, 0);
     const p = toInt(peluang, 0);
-    const q = toInt(kuota, 0); // ✅ 0 = unlimited
+    const raw = kuota.trim();
+    const q = raw === "-" ? "-" : toInt(raw, 0);
 
     if (!l) return Alert.alert("Gagal", "Nama hadiah wajib diisi.");
     if (!Number.isFinite(n) || n < 0)
       return Alert.alert("Gagal", "Nominal tidak valid.");
     if (!Number.isFinite(p) || p <= 0)
       return Alert.alert("Gagal", "Peluang harus > 0.");
-    if (!Number.isFinite(q) || q < 0)
-      return Alert.alert("Gagal", "Kuota tidak valid (minimal 0).");
+    if (q !== "-" && (!Number.isFinite(q) || q < 0)) {
+      return Alert.alert(
+        "Gagal",
+        'Kuota tidak valid (gunakan "-" untuk unlimited, 0 untuk habis)',
+      );
+    }
+
+    const safeId = l
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
 
     setItems((prev) => [
-      { id: `H${Date.now()}`, label: l, nominal: n, peluang: p, kuota: q },
+      {
+        id: safeId, // 🔥 ID STABIL
+        label: l,
+        nominal: n,
+        peluang: p,
+        kuota: q,
+        _kuotaAwal: q,
+      },
       ...prev,
     ]);
 
@@ -229,8 +309,14 @@ export default function SpinSettingPage() {
 
   // ✅ edit kuota inline (tanpa ubah logika lain)
   function updateKuota(id: string, v: string) {
-    const q = toInt(v, 0);
-    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, kuota: q } : x)));
+    const raw = v.trim();
+    const q = raw === "-" ? "-" : toInt(raw, 0);
+
+    if (q !== "-" && q < 0) return;
+
+    setItems((prev) =>
+      prev.map((x) => (x.id === id ? { ...x, kuota: q, _kuotaAwal: q } : x)),
+    );
   }
 
   async function saveAll() {
@@ -265,22 +351,62 @@ export default function SpinSettingPage() {
 
       setSaving(true);
 
-      const ref = doc(db, "spin_settings", branchId);
-
+      // ===================== 🅰️ SIMPAN HADIAH GLOBAL =====================
       await setDoc(
-        ref,
+        doc(db, "spin_settings", "global"),
         {
           sebelumTanggal: tgl,
           dipakaiBulanDepan,
-          hadiah: items.map((h) => ({
-            id: h.id,
-            label: h.label,
-            nominal: Number(h.nominal || 0),
-            peluang: Number(h.peluang || 0),
-            kuota: Number(h.kuota || 0), // ✅ simpan kuota
-          })),
+          hadiahTemplate: items.map(({ kuota, _kuotaAwal, ...h }) => h),
           updatedAt: serverTimestamp(),
-          updatedBy: auth.currentUser?.uid || null,
+        },
+        { merge: true },
+      );
+
+      // // ===================== 🅰️ SIMPAN HADIAH GLOBAL =====================
+      // await setDoc(
+      //   doc(db, "spin_settings", "global"),
+      //   {
+      //     sebelumTanggal: tgl,
+      //     dipakaiBulanDepan,
+      //     hadiahTemplate: items.map(({ kuota, _kuotaAwal, ...h }) => h),
+      //     updatedAt: serverTimestamp(),
+      //   },
+      //   { merge: true },
+      // );
+
+      // ✅ HANYA SEED KE UNIT YANG BELUM PUNYA DATA
+      const branchesSnap = await getDocs(collection(db, "branches"));
+
+      for (const b of branchesSnap.docs) {
+        const bid = b.id;
+        const kuotaRef = doc(db, "spin_kuota", bid);
+        const kuotaSnap = await getDoc(kuotaRef);
+
+        if (!kuotaSnap.exists()) {
+          await setDoc(kuotaRef, {
+            kuota: items.map((h) => ({
+              id: h.id,
+              kuota: h._kuotaAwal ?? 0,
+              kuotaAwal: h._kuotaAwal ?? 0,
+            })),
+            lastResetMonth: getMonthKey(),
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+
+      // ===================== 🅱️ SIMPAN KUOTA UNIT AKTIF =====================
+      await setDoc(
+        doc(db, "spin_kuota", branchId),
+        {
+          kuota: items.map((h) => ({
+            id: h.id,
+            kuota: h._kuotaAwal ?? h.kuota ?? 0,
+            kuotaAwal: h._kuotaAwal ?? h.kuota ?? 0,
+          })),
+          lastResetMonth: getMonthKey(),
+          updatedAt: serverTimestamp(),
         },
         { merge: true },
       );
@@ -477,16 +603,16 @@ export default function SpinSettingPage() {
                     />
                   </View>
 
-                  <Text style={[styles.label, { marginTop: 12 }]}>
-                    Kuota (0 = unlimited)
-                  </Text>
+                  {/* <Text style={[styles.label, { marginTop: 12 }]}>
+                    Kuota (- = unlimited, 0 = habis)
+                  </Text> */}
                   <View style={styles.inputWrap2}>
                     <TextInput
                       value={kuota}
                       onChangeText={setKuota}
                       placeholder="0"
                       placeholderTextColor="#94A3B8"
-                      keyboardType="number-pad"
+                      keyboardType="default"
                       style={styles.input2}
                     />
                   </View>
@@ -514,7 +640,10 @@ export default function SpinSettingPage() {
                       <Text style={styles.itemSub}>
                         Nominal: Rp {h.nominal.toLocaleString("id-ID")} •
                         Peluang: {h.peluang}% • Kuota:{" "}
-                        {h.kuota === 0 ? "∞" : h.kuota}
+                        {h.kuota === "-" ? "∞" : h.kuota}
+                        {/* <Text style={styles.inlineHint}>
+                          (- = ∞, 0 = habis)
+                        </Text> */}
                       </Text>
 
                       <View style={styles.inlineRow}>
@@ -525,11 +654,13 @@ export default function SpinSettingPage() {
                             onChangeText={(v) => updateKuota(h.id, v)}
                             placeholder="0"
                             placeholderTextColor="#94A3B8"
-                            keyboardType="number-pad"
+                            keyboardType="default"
                             style={styles.inlineInput}
                           />
                         </View>
-                        <Text style={styles.inlineHint}>(0=∞)</Text>
+                        {/* <Text style={styles.inlineHint}>
+                          (- = ∞, 0 = habis)
+                        </Text> */}
                       </View>
                     </View>
 

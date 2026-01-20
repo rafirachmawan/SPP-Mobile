@@ -1,7 +1,7 @@
 // FILE: app/admin/bayar.tsx
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -39,6 +39,10 @@ import {
 
 import { onSnapshot } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+
+import { Animated, Easing } from "react-native";
+
+import Svg, { Circle, G, Path, Text as SvgText } from "react-native-svg";
 
 const THEME = {
   bg1: "#BFE9FF",
@@ -100,6 +104,11 @@ type ProofLocal = {
   mime: string;
   source: "camera" | "gallery";
   bytesApprox?: number;
+};
+
+type SpinResult = {
+  label: string;
+  nominal: number;
 };
 
 function nextMonthKey(mk: string) {
@@ -302,7 +311,68 @@ function InvoiceRow({
   );
 }
 
+function SectionTitle({ title }: { title: string }) {
+  return (
+    <Text
+      style={{
+        marginTop: 14,
+        marginBottom: 6,
+        fontWeight: "900",
+        fontSize: 13,
+        color: "#0F172A",
+      }}
+    >
+      {title}
+    </Text>
+  );
+}
+
 export default function BayarSPP() {
+  function polarToCartesian(cx: number, cy: number, r: number, angle: number) {
+    const rad = ((angle - 90) * Math.PI) / 180;
+    return {
+      x: cx + r * Math.cos(rad),
+      y: cy + r * Math.sin(rad),
+    };
+  }
+
+  function describeArc(
+    cx: number,
+    cy: number,
+    r: number,
+    startAngle: number,
+    endAngle: number,
+  ) {
+    const start = polarToCartesian(cx, cy, r, endAngle);
+    const end = polarToCartesian(cx, cy, r, startAngle);
+    const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+    return `
+    M ${cx} ${cy}
+    L ${start.x} ${start.y}
+    A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y}
+    Z
+  `;
+  }
+
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  function animateSpin(onDone?: () => void) {
+    spinAnim.setValue(0);
+
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 3200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => onDone?.());
+  }
+
+  const rotate = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", `${360 * (3 + Math.random() * 3)}deg`],
+  });
+
   const insets = useSafeAreaInsets();
 
   const today = new Date();
@@ -315,47 +385,28 @@ export default function BayarSPP() {
   const [sebelumTanggal, setSebelumTanggal] = useState(11);
   const [dipakaiBulanDepan, setDipakaiBulanDepan] = useState(true);
   const [hadiah, setHadiah] = useState<Hadiah[]>([]);
-  const canSpinToday = day < sebelumTanggal;
 
-  // useEffect(() => {
-  //   (async () => {
-  //     try {
-  //       const refx = doc(db, "spin_settings", branchId);
-  //       const snap = await getDoc(refx);
+  const [hadiahTemplate, setHadiahTemplate] = useState<any[]>([]);
 
-  //       if (snap.exists()) {
-  //         const data = snap.data() as any;
-  //         const st = Number(data.sebelumTanggal ?? 11);
-  //         setSebelumTanggal(Number.isFinite(st) ? st : 11);
-  //         setDipakaiBulanDepan(data.dipakaiBulanDepan !== false);
+  function canSpinForMonth(spinMonthKey: string, sebelumTanggal: number) {
+    const [y, m] = spinMonthKey.split("-").map(Number);
 
-  //         const arr = Array.isArray(data.hadiah) ? data.hadiah : [];
-  //         const parsed: Hadiah[] = arr.map((h: any, idx: number) => ({
-  //           id: String(h.id || `H${idx + 1}`),
-  //           label: String(h.label || ""),
-  //           nominal: Number(h.nominal || 0),
-  //           peluang: Number(h.peluang || 0),
-  //         }));
-  //         setHadiah(
-  //           parsed.length
-  //             ? parsed
-  //             : [{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }],
-  //         );
-  //       } else {
-  //         setSebelumTanggal(11);
-  //         setDipakaiBulanDepan(true);
-  //         setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
-  //       }
-  //     } catch (e) {
-  //       console.log(e);
-  //       setSebelumTanggal(11);
-  //       setDipakaiBulanDepan(true);
-  //       setHadiah([{ id: "H1", label: "Zonk", nominal: 0, peluang: 100 }]);
-  //     } finally {
-  //       setSpinLoading(false);
-  //     }
-  //   })();
-  // }, []);
+    // batas spin = tanggal X di bulan spin
+    const spinDeadline = new Date(y, m - 1, sebelumTanggal, 23, 59, 59);
+
+    // hari ini
+    const now = new Date();
+
+    return now <= spinDeadline;
+  }
+
+  // ===================== SPIN WHEEL UI =====================
+  const [spinWheelOpen, setSpinWheelOpen] = useState(false);
+  const [spinWheelRunning, setSpinWheelRunning] = useState(false);
+  const [spinWheelResult, setSpinWheelResult] = useState<{
+    label: string;
+    nominal: number;
+  } | null>(null);
 
   // ===================== CABANG ADMIN LOGIN =====================
   const [branchId, setBranchId] = useState<string>("");
@@ -457,7 +508,8 @@ export default function BayarSPP() {
       try {
         setSpinLoading(true);
 
-        const refx = doc(db, "spin_settings", branchId);
+        const refx = doc(db, "spin_settings", "global");
+
         const snap = await getDoc(refx);
 
         if (snap.exists()) {
@@ -468,7 +520,12 @@ export default function BayarSPP() {
             setSebelumTanggal(Number.isFinite(st) ? st : 11);
             setDipakaiBulanDepan(data.dipakaiBulanDepan !== false);
 
-            const arr = Array.isArray(data.hadiah) ? data.hadiah : [];
+            const arr = Array.isArray(data.hadiahTemplate)
+              ? data.hadiahTemplate
+              : [];
+
+            setHadiahTemplate(arr); // ✅ SIMPAN TEMPLATE GLOBAL
+
             const parsed: Hadiah[] = arr.map((h: any, idx: number) => ({
               id: String(h.id || `H${idx + 1}`),
               label: String(h.label || ""),
@@ -605,10 +662,16 @@ export default function BayarSPP() {
     Record<string, number | null>
   >({});
   const [lastSpinAwardTotal, setLastSpinAwardTotal] = useState(0);
+  const [lastSpinNominal, setLastSpinNominal] = useState(0);
 
   function monthIndexOfKey(mk: string) {
     const order = monthOptions.map((m) => m.key);
     return order.indexOf(mk);
+  }
+
+  function resolveSpinTargetMonth(paidMonthKey: string) {
+    // 🔥 SELALU UNTUK BULAN BERIKUTNYA
+    return nextMonthKey(paidMonthKey);
   }
 
   /**
@@ -622,16 +685,16 @@ export default function BayarSPP() {
     const order = monthOptions.map((m) => m.key);
     const result = new Set<string>();
 
-    for (const mk of paidKeys) {
-      const next = nextMonthKey(mk);
+    const today = new Date();
+    if (today.getDate() >= sebelumTanggal) return [];
 
-      // valid month
-      if (!order.includes(next)) continue;
+    for (const paidMk of paidKeys) {
+      const targetMk = nextMonthKey(paidMk); // 🔥 FIX
 
-      // bulan spin BELUM dibayar
-      if (paidMonthsMap?.[next]?.paid) continue;
+      if (!order.includes(targetMk)) continue;
+      if (paidMonthsMap?.[targetMk]?.paid) continue;
 
-      result.add(next);
+      result.add(targetMk);
     }
 
     return Array.from(result).sort(
@@ -988,7 +1051,8 @@ export default function BayarSPP() {
 
   // ✅ toggle select bulan (dipakai di dropdown list)
   async function toggleMonthPick(key: string) {
-    if (!selected || !invoiceDraft) return;
+    if (!selected || !invoiceDraft) return null;
+
     if (invoiceDraft.status === "PAID") return;
 
     if (paidMonths?.[key]?.paid) {
@@ -1041,192 +1105,161 @@ export default function BayarSPP() {
   }
 
   // ===================== SPIN STEP-BY-STEP (FIX: auto hitung pending tanpa queue/cursor) =====================
-  async function spinNext() {
-    if (!selected || !invoiceDraft) return;
-
-    if (spinLoading) {
-      Alert.alert("Tunggu", "Setting spin masih dimuat...");
-      return;
-    }
-
-    if (!canSpinToday) {
-      Alert.alert(
-        "Spin Ditutup",
-        `Spin hanya bisa dilakukan sebelum tanggal ${sebelumTanggal}.`,
-      );
-      return;
-    }
-
-    if (invoiceDraft.status === "PAID") {
-      Alert.alert("Sudah Lunas", "Spin hanya bisa sebelum pembayaran.");
-      return;
-    }
-
-    const eligible = getEligibleSpinMonths(invoiceDraft.monthKeys, paidMonths);
-
-    const pending = eligible.filter((mk) => multiSpinDoneMap[mk] == null);
-
-    const currentMk = pending[0];
-    if (!currentMk) {
-      Alert.alert("Selesai", "Semua bulan yang eligible sudah di-spin.");
-      return;
-    }
-    const lab =
-      monthOptions.find((m) => m.key === currentMk)?.label || currentMk;
-
+  async function spinNext(): Promise<SpinResult | null> {
     try {
-      setMultiSpinLoading(true);
+      if (!selected || !invoiceDraft || !branchId) return null;
 
-      const discId = `${selected.id}_${currentMk}`;
-      const refx = doc(db, "student_discounts", discId);
-
-      // kalau sudah ada voucher, catat lalu selesai step ini (tanpa mengurangi jatah)
-      const exists = await getDoc(refx);
-      if (exists.exists()) {
-        const ex = exists.data() as any;
-        const nominalEx = Math.max(Number(ex?.nominal || 0), 0);
-
-        setMultiSpinDoneMap((p) => ({ ...p, [currentMk]: nominalEx }));
-        setLastSpinAwardTotal((p) => p + nominalEx);
-
-        // rebuild invoice agar potongan langsung kepotong
-        setInvoiceLoading(true);
-        const nextMonths = invoiceDraft.monthKeys
-          .map((k) => monthOptions.find((m) => m.key === k))
-          .filter(Boolean)
-          .map((m: any) => ({ key: m.key, label: m.label }));
-
-        const rebuilt = await buildDraftForMonths(
-          selected,
-          nextMonths,
-          invoiceDraft.paymentGroupId,
-        );
-        setInvoiceDraft((p) =>
-          p
-            ? {
-                ...rebuilt,
-                metode: p.metode,
-                proofDataUrl: p.proofDataUrl,
-                proofMime: p.proofMime,
-                proofType: p.proofType,
-              }
-            : rebuilt,
-        );
-        setInvoiceLoading(false);
-        return;
+      if (spinLoading) {
+        Alert.alert("Tunggu", "Setting spin masih dimuat...");
+        return null;
       }
 
-      let picked: any = null;
-      let pickedNominal = 0;
+      const eligible = getEligibleSpinMonths(
+        invoiceDraft.monthKeys,
+        paidMonths,
+      );
 
-      await runTransaction(db, async (trx) => {
-        // ❌ Cegah double spin
-        const discSnap = await trx.get(refx);
-        if (discSnap.exists()) return;
+      const pending = eligible.filter((mk) => multiSpinDoneMap[mk] == null);
+      const currentMk = pending[0];
 
-        const spinSettingRef = doc(db, "spin_settings", branchId);
-        const settingSnap = await trx.get(spinSettingRef);
+      if (!currentMk) {
+        Alert.alert("Selesai", "Semua bulan sudah di-spin.");
+        return null;
+      }
 
-        if (!settingSnap.exists()) {
-          throw new Error("Setting spin cabang tidak ditemukan");
+      const spinEligibleCount = eligible.length;
+      const spinPendingCount = pending.length;
+
+      const spinLocked =
+        spinEligibleCount === 0 || spinPendingCount === 0 || spinLoading;
+
+      setMultiSpinLoading(true);
+
+      const result = await runTransaction(db, async (trx) => {
+        const kuotaRef = doc(db, "spin_kuota", branchId);
+        const kuotaSnap = await trx.get(kuotaRef);
+
+        // ===================== AUTO SEED KUOTA (JIKA BELUM ADA) =====================
+        let kuotaArr: any[] = [];
+
+        if (!kuotaSnap.exists()) {
+          // buat kuota dari hadiah global
+          kuotaArr = hadiahTemplate.map((h: any) => ({
+            id: h.id,
+            kuota: h.kuota ?? "-", // default unlimited
+            kuotaAwal: h.kuota ?? "-",
+          }));
+
+          trx.set(kuotaRef, {
+            kuota: kuotaArr,
+            lastResetMonth: currentMonthKey,
+            createdAt: serverTimestamp(),
+          });
+        } else {
+          kuotaArr = Array.isArray(kuotaSnap.data().kuota)
+            ? kuotaSnap.data().kuota
+            : [];
         }
 
-        const data = settingSnap.data();
-        const hadiahAll = Array.isArray(data.hadiah) ? data.hadiah : [];
+        // ===================== MAP KUOTA =====================
+        const kuotaMap: Record<string, any> = {};
+        kuotaArr.forEach((k) => {
+          kuotaMap[k.id] = { ...k };
+        });
 
-        // 1️⃣ FILTER HADIAH YANG MASIH ADA KUOTA
-        const hadiahAktif = hadiahAll.filter(
-          (h: any) => h.kuota === 0 || h.kuota > 0,
+        // ===================== CEK SUDAH PERNAH SPIN =====================
+        const discountRef = doc(
+          db,
+          "student_discounts",
+          `${selected.id}_${currentMk}`,
         );
+        const discountSnap = await trx.get(discountRef);
 
-        if (hadiahAktif.length === 0) {
-          throw new Error("Semua voucher sudah habis");
+        if (discountSnap.exists()) {
+          throw new Error("Voucher bulan ini sudah ada");
         }
 
-        // 2️⃣ RANDOM SESUAI PELUANG
-        const totalPeluang = hadiahAktif.reduce(
-          (a: number, b: any) => a + Number(b.peluang || 0),
-          0,
-        );
+        // ===================== MERGE HADIAH + KUOTA =====================
+        const merged = hadiahTemplate.map((h: any) => {
+          const k = kuotaMap[h.id];
+          return {
+            ...h,
+            kuota: k ? k.kuota : "-",
+          };
+        });
 
-        let rand = Math.random() * totalPeluang;
-        for (const h of hadiahAktif) {
-          rand -= Number(h.peluang || 0);
-          if (rand <= 0) {
+        const aktif = merged.filter((h: any) => {
+          if (h.kuota === "-" || h.kuota === undefined) return true;
+          return Number(h.kuota) > 0;
+        });
+
+        if (!aktif.length) {
+          throw new Error("Semua voucher habis");
+        }
+
+        // ===================== PICK BY WEIGHT =====================
+        let r =
+          Math.random() * aktif.reduce((a: number, b: any) => a + b.peluang, 0);
+
+        let picked = aktif[0];
+        for (const h of aktif) {
+          r -= h.peluang;
+          if (r <= 0) {
             picked = h;
             break;
           }
         }
 
-        if (!picked) picked = hadiahAktif[0];
-        pickedNominal = Number(picked.nominal || 0);
+        const nominal = Number(picked.nominal || 0);
 
-        // 3️⃣ KURANGI KUOTA (JIKA BUKAN UNLIMITED)
-        const idx = hadiahAll.findIndex((h: any) => h.id === picked.id);
-        if (hadiahAll[idx].kuota > 0) {
-          hadiahAll[idx].kuota -= 1;
+        // ===================== KURANGI KUOTA (JIKA BUKAN UNLIMITED) =====================
+        if (typeof picked.kuota === "number") {
+          kuotaMap[picked.id].kuota = picked.kuota - 1;
+
+          trx.set(
+            kuotaRef,
+            {
+              kuota: Object.values(kuotaMap),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
         }
 
-        // 4️⃣ UPDATE SPIN SETTING
-        trx.update(spinSettingRef, {
-          hadiah: hadiahAll,
-          updatedAt: serverTimestamp(),
-        });
-
-        // 5️⃣ SIMPAN HASIL SPIN
-        trx.set(refx, {
+        // ===================== SIMPAN DISCOUNT SISWA =====================
+        trx.set(discountRef, {
           studentId: selected.id,
           studentName: selected.name,
           branchId,
           branchName,
           monthKey: currentMk,
           label: picked.label,
-          nominal: pickedNominal,
+          nominal,
           createdAt: serverTimestamp(),
-          source: "SPIN_STEP_BY_STEP",
-          sourcePaymentGroupId: invoiceDraft.paymentGroupId,
-          dipakaiBulanDepan: false,
         });
+
+        return {
+          label: picked.label,
+          nominal,
+        } as SpinResult;
       });
 
-      setMultiSpinDoneMap((p) => ({ ...p, [currentMk]: pickedNominal }));
-      setLastSpinAwardTotal((p) => p + pickedNominal);
+      // ===================== UPDATE UI =====================
+      setMultiSpinDoneMap((p) => ({
+        ...p,
+        [currentMk]: result.nominal,
+      }));
 
-      Alert.alert(
-        "🎁 Spin Berhasil",
-        `${lab}\n${picked.label} (${rupiah(pickedNominal)})`,
-      );
+      setLastSpinAwardTotal((p) => p + result.nominal);
+      setLastSpinNominal(result.nominal);
 
-      // ✅ rebuild invoice agar potongan langsung masuk rincian (Feb & Mar kelihatan)
-      setInvoiceLoading(true);
-      const nextMonths = invoiceDraft.monthKeys
-        .map((k) => monthOptions.find((m) => m.key === k))
-        .filter(Boolean)
-        .map((m: any) => ({ key: m.key, label: m.label }));
-
-      const rebuilt = await buildDraftForMonths(
-        selected,
-        nextMonths,
-        invoiceDraft.paymentGroupId,
-      );
-      setInvoiceDraft((p) =>
-        p
-          ? {
-              ...rebuilt,
-              metode: p.metode,
-              proofDataUrl: p.proofDataUrl,
-              proofMime: p.proofMime,
-              proofType: p.proofType,
-            }
-          : rebuilt,
-      );
-      setInvoiceLoading(false);
+      return result;
     } catch (e: any) {
-      console.log(e);
-      Alert.alert("Gagal", e?.message || "Spin gagal.");
+      console.log("SPIN ERROR:", e);
+      Alert.alert("Gagal", e?.message || "Spin gagal diproses.");
+      return null;
     } finally {
       setMultiSpinLoading(false);
-      setInvoiceLoading(false);
     }
   }
 
@@ -1613,6 +1646,23 @@ export default function BayarSPP() {
             <View style={styles.invHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.invoiceTitle}>Invoice Pembayaran</Text>
+                <Text
+                  style={{ fontSize: 11, color: THEME.sub, fontWeight: "700" }}
+                >
+                  {invoiceDraft && (
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: THEME.sub,
+                        fontWeight: "700",
+                      }}
+                    >
+                      {invoiceDraft.status === "PAID"
+                        ? `Dibayar: ${invoiceDraft.paidAtText}`
+                        : `Dibuat: ${formatTanggalJam(invoiceDraft.createdAtLocal)}`}
+                    </Text>
+                  )}
+                </Text>
               </View>
 
               {!!invoiceDraft && (
@@ -1884,9 +1934,7 @@ export default function BayarSPP() {
                 {/* ✅ SPIN STEP-BY-STEP */}
                 {invoiceDraft.status !== "PAID" && (
                   <View style={{ marginTop: 12 }}>
-                    <Text style={styles.invSectionTitle}>
-                      Spin Potongan (Untuk Bulan Setelah Bulan Pertama)
-                    </Text>
+                    <SectionTitle title="Spin Potongan (Bulan Berikutnya)" />
 
                     {(() => {
                       const eligible = getEligibleSpinMonths(
@@ -1903,73 +1951,105 @@ export default function BayarSPP() {
 
                       return (
                         <>
-                          <View style={styles.spinInfoBox}>
-                            <Text style={styles.spinInfoText}>
-                              Status:{" "}
-                              <Text
-                                style={{ fontWeight: "900", color: THEME.text }}
-                              >
-                                {canSpinToday ? "BISA SPIN" : "TERKUNCI"}
-                              </Text>
-                              {"\n"}
-                              Eligible:{" "}
-                              <Text
-                                style={{ fontWeight: "900", color: THEME.text }}
-                              >
-                                {eligible.length}x
-                              </Text>
-                              {"\n"}
-                              Total Hadiah Spin (yang sudah didapat):{" "}
-                              <Text
-                                style={{ fontWeight: "900", color: THEME.text }}
-                              >
-                                {rupiah(lastSpinAwardTotal)}
-                              </Text>
-                            </Text>
-                          </View>
+                          {(() => {
+                            const eligible = getEligibleSpinMonths(
+                              invoiceDraft.monthKeys,
+                              paidMonths,
+                            );
 
-                          <TouchableOpacity
-                            activeOpacity={0.9}
-                            style={[
-                              styles.spinPreBtn,
-                              (!canSpinToday ||
-                                multiSpinLoading ||
-                                !eligible.length ||
-                                !pending.length ||
-                                spinLoading) && { opacity: 0.45 },
-                            ]}
-                            onPress={spinNext}
-                            disabled={
-                              !canSpinToday ||
-                              multiSpinLoading ||
+                            const pending = eligible.filter(
+                              (mk) => multiSpinDoneMap[mk] == null,
+                            );
+
+                            const stepNow =
+                              eligible.length - pending.length + 1;
+                            const stepMax = eligible.length;
+
+                            const spinLocked =
                               spinLoading ||
                               eligible.length === 0 ||
-                              pending.length === 0
-                            }
-                          >
-                            {multiSpinLoading ? (
-                              <ActivityIndicator />
-                            ) : (
+                              pending.length === 0;
+
+                            return (
                               <>
-                                <Ionicons
-                                  name="gift-outline"
-                                  size={18}
-                                  color="#0F172A"
-                                />
-                                <Text style={styles.spinPreText}>
-                                  {eligible.length === 0
-                                    ? "Tidak ada bulan eligible untuk spin"
-                                    : pending.length === 0
-                                      ? "Semua bulan eligible sudah dapat potongan"
-                                      : `Spin ${stepNow}/${stepMax} (untuk ${
-                                          monthOptions.find(
-                                            (m) => m.key === pending[0],
-                                          )?.label || pending[0]
-                                        })`}
-                                </Text>
+                                <View style={styles.spinInfoBox}>
+                                  <Text style={styles.spinInfoText}>
+                                    Status:{" "}
+                                    <Text style={{ fontWeight: "900" }}>
+                                      {eligible.length === 0
+                                        ? "TIDAK TERSEDIA"
+                                        : pending.length === 0
+                                          ? "SELESAI"
+                                          : "TERBUKA"}
+                                    </Text>
+                                    {"\n"}
+                                    Eligible Spin:{" "}
+                                    <Text style={{ fontWeight: "900" }}>
+                                      {eligible.length}x
+                                    </Text>
+                                    {"\n"}
+                                    Total Hadiah Spin:{" "}
+                                    <Text style={{ fontWeight: "900" }}>
+                                      {rupiah(lastSpinAwardTotal)}
+                                    </Text>
+                                  </Text>
+                                </View>
+
+                                {/* 🔘 TOMBOL SPIN */}
+                                <TouchableOpacity
+                                  activeOpacity={0.9}
+                                  disabled={spinLocked}
+                                  onPress={() => setSpinWheelOpen(true)}
+                                  style={[
+                                    styles.spinPreBtn,
+                                    spinLocked
+                                      ? styles.spinBtnLocked
+                                      : styles.spinBtnActive,
+                                  ]}
+                                >
+                                  <Ionicons
+                                    name={
+                                      spinLocked
+                                        ? "lock-closed-outline"
+                                        : "gift-outline"
+                                    }
+                                    size={18}
+                                    color={spinLocked ? "#64748B" : "#FFFFFF"}
+                                  />
+
+                                  <View style={{ alignItems: "center" }}>
+                                    <Text
+                                      style={[
+                                        styles.spinBtnText,
+                                        spinLocked && { color: "#64748B" },
+                                      ]}
+                                    >
+                                      {spinLocked
+                                        ? "SPIN TERKUNCI"
+                                        : "SPIN SEKARANG"}
+                                    </Text>
+
+                                    <Text
+                                      style={[
+                                        styles.spinBtnSub,
+                                        spinLocked && { color: "#94A3B8" },
+                                      ]}
+                                    >
+                                      {spinLocked
+                                        ? eligible.length === 0
+                                          ? "Tidak ada bulan eligible"
+                                          : "Semua spin sudah digunakan"
+                                        : `Spin ${stepNow}/${stepMax} • ${
+                                            monthOptions.find(
+                                              (m) => m.key === pending[0],
+                                            )?.label
+                                          }`}
+                                    </Text>
+                                  </View>
+                                </TouchableOpacity>
                               </>
-                            )}
-                          </TouchableOpacity>
+                            );
+                          })()}
 
                           {eligible.length > 0 && (
                             <View style={styles.spinListBox}>
@@ -2101,29 +2181,13 @@ export default function BayarSPP() {
                           </Text>
                         </View>
 
-                        {/* 🔹 POTONGAN SPIN */}
-                        {invoiceDraft.spinByMonth?.[mk] > 0 && (
-                          <View style={styles.itemMonthRow2}>
-                            <Text style={styles.itemMonthSub}>
-                              Potongan Voucher
-                            </Text>
-                            <Text
-                              style={[
-                                styles.itemMonthSubV,
-                                { color: "#16A34A" },
-                              ]}
-                            >
-                              - {rupiah(invoiceDraft.spinByMonth[mk])}
-                            </Text>
-                          </View>
-                        )}
-
                         {/* POTONGAN SPIN */}
                         {spin > 0 && (
                           <View style={styles.itemMonthRow2}>
                             <Text style={styles.itemMonthSub}>
-                              Potongan Voucher
+                              Potongan Voucher (Spin)
                             </Text>
+
                             <Text
                               style={[
                                 styles.itemMonthSubV,
@@ -2413,6 +2477,194 @@ export default function BayarSPP() {
                   <Text style={styles.closeText2}>Tutup</Text>
                 </TouchableOpacity>
               </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+      {/* ===================== MODAL SPIN WHEEL ===================== */}
+      <Modal
+        visible={spinWheelOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!spinWheelRunning) setSpinWheelOpen(false);
+        }}
+      >
+        <View style={styles.backdrop}>
+          <View
+            style={{
+              backgroundColor: "#fff",
+              borderRadius: 22,
+              padding: 18,
+              width: "100%",
+              maxWidth: 320,
+              alignItems: "center",
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: "900", marginBottom: 12 }}>
+              🎡 Spin Voucher
+            </Text>
+
+            {/* RODA VISUAL (SIMPLE) */}
+            {/* CONTAINER RODA */}
+            <View
+              style={{
+                width: 240,
+                height: 240,
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 16,
+              }}
+            >
+              {/* POINTER */}
+              <View
+                style={{
+                  position: "absolute",
+                  top: -10,
+                  width: 0,
+                  height: 0,
+                  borderLeftWidth: 10,
+                  borderRightWidth: 10,
+                  borderBottomWidth: 18,
+                  borderLeftColor: "transparent",
+                  borderRightColor: "transparent",
+                  borderBottomColor: "#EF4444",
+                  zIndex: 10,
+                }}
+              />
+
+              {/* SVG RODA */}
+              <Animated.View
+                style={{
+                  transform: [{ rotate }],
+                }}
+              >
+                <Svg width={220} height={220}>
+                  <G origin="110,110">
+                    {hadiah.map((h, i) => {
+                      const angle = 360 / hadiah.length;
+                      const start = i * angle;
+                      const end = start + angle;
+                      const mid = start + angle / 2;
+
+                      const labelPos = polarToCartesian(110, 110, 72, mid);
+
+                      return (
+                        <G key={h.id}>
+                          {/* SLICE */}
+                          <Path
+                            d={describeArc(110, 110, 110, start, end)}
+                            fill={i % 2 === 0 ? "#60A5FA" : "#38BDF8"}
+                          />
+
+                          {/* TEXT */}
+                          <SvgText
+                            x={labelPos.x}
+                            y={labelPos.y}
+                            fill="#0F172A"
+                            fontSize="11"
+                            fontWeight="700"
+                            textAnchor="middle"
+                            alignmentBaseline="middle"
+                          >
+                            {h.label}
+                          </SvgText>
+                        </G>
+                      );
+                    })}
+
+                    {/* CENTER */}
+                    <Circle
+                      cx={110}
+                      cy={110}
+                      r={34}
+                      fill="#0EA5E9"
+                      stroke="#fff"
+                      strokeWidth={4}
+                    />
+                    <SvgText
+                      x={110}
+                      y={110}
+                      fill="#fff"
+                      fontSize="16"
+                      fontWeight="900"
+                      textAnchor="middle"
+                      alignmentBaseline="middle"
+                    >
+                      🎁
+                    </SvgText>
+                  </G>
+                </Svg>
+              </Animated.View>
+            </View>
+
+            {/* HASIL */}
+            {spinWheelResult ? (
+              <>
+                <Text
+                  style={{
+                    fontWeight: "900",
+                    fontSize: 16,
+                    color: "#16A34A",
+                  }}
+                >
+                  🎉 {spinWheelResult.label}
+                </Text>
+                <Text
+                  style={{
+                    fontWeight: "900",
+                    fontSize: 18,
+                    marginTop: 4,
+                  }}
+                >
+                  {rupiah(spinWheelResult.nominal)}
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setSpinWheelResult(null);
+                    setSpinWheelOpen(false);
+                  }}
+                  style={{ marginTop: 14 }}
+                >
+                  <Text style={{ fontWeight: "900", color: "#EF4444" }}>
+                    Tutup
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={{
+                  backgroundColor: THEME.primary,
+                  paddingVertical: 12,
+                  paddingHorizontal: 30,
+                  borderRadius: 16,
+                  opacity: spinWheelRunning ? 0.6 : 1,
+                }}
+                disabled={spinWheelRunning}
+                onPress={async () => {
+                  setSpinWheelRunning(true);
+                  animateSpin(async () => {
+                    try {
+                      const res = await spinNext();
+                      if (res) {
+                        setSpinWheelResult(res);
+                      }
+                    } finally {
+                      setSpinWheelRunning(false);
+                    }
+                  });
+                }}
+              >
+                {spinWheelRunning ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={{ color: "#fff", fontWeight: "900" }}>
+                    PUTAR RODA
+                  </Text>
+                )}
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -2941,4 +3193,26 @@ const styles = StyleSheet.create({
 
   closeBtn2: { marginTop: 10, alignItems: "center" },
   closeText2: { fontWeight: "900", color: "#EF4444" },
+
+  spinBtnActive: {
+    backgroundColor: "#0EA5E9", // PRIMARY
+    borderColor: "#0284C7",
+  },
+
+  spinBtnLocked: {
+    backgroundColor: "#F1F5F9",
+    borderColor: "#CBD5E1",
+  },
+
+  spinBtnText: {
+    fontWeight: "900",
+    fontSize: 13,
+    color: "#FFFFFF",
+  },
+
+  spinBtnSub: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#E0F2FE",
+  },
 });
