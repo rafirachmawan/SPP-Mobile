@@ -9,6 +9,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +24,9 @@ import {
 // ✅ Firebase (ASLI — TIDAK DIUBAH)
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
+
+const SPREADSHEET_URL =
+  "https://docs.google.com/spreadsheets/d/1GpLi4R5CZgvAszNPBFcgPPclLsljhCs_6JU0Ix5zO0g/edit?hl=id&gid=1186165288#gid=1186165288";
 
 // ================= FONT MAP =================
 const F = {
@@ -190,15 +194,21 @@ export default function SuperadminDashboard() {
             label="Setting Hadiah Spin"
             onPress={() => router.push("/superadmin/spin")}
           />
-          <Action
+
+          {/* <Action
             icon="settings-outline"
             label="Setting SPP"
             onPress={() => router.push("/superadmin/setting-spp")}
-          />
+          /> */}
           <Action
             icon="school-outline"
             label="Siswa per Cabang"
             onPress={() => router.push("/superadmin/siswa")}
+          />
+          <Action
+            icon="logo-google"
+            label="Rekapan SPP"
+            onPress={() => Linking.openURL(SPREADSHEET_URL)}
           />
 
           <TouchableOpacity

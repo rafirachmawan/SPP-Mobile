@@ -25,6 +25,22 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
+import { Linking } from "react-native";
+const SPREADSHEET_BASE_URL =
+  "https://docs.google.com/spreadsheets/d/1GpLi4R5CZgvAszNPBFcgPPclLsljhCs_6JU0Ix5zO0g/edit";
+
+const BRANCH_SHEET_GID: Record<string, string> = {
+  "Unit Ngunut": "1186165288",
+  "Unit Balesono": "901725034",
+  "Unit Gragalan": "1212330600",
+};
+
+function getSpreadsheetUrlForBranchName(branchName: string) {
+  const gid = BRANCH_SHEET_GID[branchName];
+  if (!gid) return SPREADSHEET_BASE_URL;
+  return `${SPREADSHEET_BASE_URL}#gid=${gid}`;
+}
+
 /* ===================== THEME ===================== */
 const F = {
   regular: "Inter_400Regular",
@@ -252,6 +268,31 @@ export default function AdminDashboard() {
             </TouchableOpacity>
           ))}
         </View>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => {
+            if (!branchId) return;
+            if (!branchName || branchName === "-") return;
+            const url = getSpreadsheetUrlForBranchName(branchName);
+            Linking.openURL(url);
+
+            Linking.openURL(url);
+          }}
+          style={styles.menuItem}
+        >
+          <View style={styles.menuIcon}>
+            <Ionicons name="logo-google" size={20} color="#16A34A" />
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.menuText}>Rekapan SPP Cabang</Text>
+            <Text style={styles.menuDesc}>
+              Buka Rekapan khusus {branchName}
+            </Text>
+          </View>
+
+          <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+        </TouchableOpacity>
 
         <View style={{ height: 16 }} />
       </ScrollView>
