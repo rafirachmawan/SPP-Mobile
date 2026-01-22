@@ -47,6 +47,21 @@ const F = {
   extrabold: "Inter_800ExtraBold",
 };
 
+function formatRupiahInput(value: string) {
+  // ambil angka saja
+  const numeric = value.replace(/[^\d]/g, "");
+  const numberValue = Number(numeric || 0);
+
+  if (!numberValue) {
+    return { raw: 0, formatted: "" };
+  }
+
+  return {
+    raw: numberValue, // ⬅️ angka murni
+    formatted: `Rp ${numberValue.toLocaleString("id-ID")}`, // ⬅️ tampilan
+  };
+}
+
 function toInt(v: string, fallback = 0) {
   const n = Number(String(v || "").replace(/[^\d]/g, ""));
   return Number.isFinite(n) ? n : fallback;
@@ -581,8 +596,11 @@ export default function SpinSettingPage() {
                   <View style={styles.inputWrap2}>
                     <TextInput
                       value={nominal}
-                      onChangeText={setNominal}
-                      placeholder="10000"
+                      onChangeText={(v) => {
+                        const { formatted } = formatRupiahInput(v);
+                        setNominal(formatted);
+                      }}
+                      placeholder="Rp 10.000"
                       placeholderTextColor="#94A3B8"
                       keyboardType="number-pad"
                       style={styles.input2}

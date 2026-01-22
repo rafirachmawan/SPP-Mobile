@@ -1294,10 +1294,11 @@ export default function BayarSPP() {
       }
 
       const hasProof = !!proofLocal?.dataUrl || !!invoiceDraft.proofDataUrl;
-      if (invoiceDraft.metode === "Transfer" && !hasProof) {
+
+      if (!hasProof) {
         Alert.alert(
-          "Bukti Transfer",
-          "Untuk metode Transfer, wajib upload/foto bukti dulu.",
+          "Bukti Pembayaran",
+          "Pembayaran wajib disertai bukti (foto/upload), baik Cash maupun Transfer.",
         );
         return;
       }
@@ -2375,11 +2376,10 @@ export default function BayarSPP() {
                             </TouchableOpacity>
                           </View>
 
-                          {invoiceDraft.metode === "Transfer" && (
-                            <Text style={[styles.note, { marginTop: 0 }]}>
-                              * Transfer wajib upload/foto bukti.
-                            </Text>
-                          )}
+                          <Text style={[styles.note, { marginTop: 0 }]}>
+                            * Pembayaran Cash & Transfer wajib upload/foto
+                            bukti.
+                          </Text>
                         </View>
                       ) : (
                         <View style={{ gap: 10 }}>
@@ -2424,11 +2424,10 @@ export default function BayarSPP() {
                             </TouchableOpacity>
                           </View>
 
-                          {invoiceDraft.metode === "Transfer" && (
-                            <Text style={[styles.note, { marginTop: 0 }]}>
-                              * Transfer wajib upload/foto bukti.
-                            </Text>
-                          )}
+                          <Text style={[styles.note, { marginTop: 0 }]}>
+                            * Pembayaran Cash & Transfer wajib upload/foto
+                            bukti.
+                          </Text>
                         </View>
                       )}
                     </View>
@@ -2509,11 +2508,11 @@ export default function BayarSPP() {
             {/* CONTAINER RODA */}
             <View
               style={{
-                width: 240,
-                height: 240,
+                width: 280,
+                height: 280,
                 alignItems: "center",
                 justifyContent: "center",
-                marginBottom: 16,
+                marginBottom: 18,
               }}
             >
               {/* POINTER */}
@@ -2539,21 +2538,21 @@ export default function BayarSPP() {
                   transform: [{ rotate }],
                 }}
               >
-                <Svg width={220} height={220}>
-                  <G origin="110,110">
+                <Svg width={260} height={260}>
+                  <G origin="130,130">
                     {hadiah.map((h, i) => {
                       const angle = 360 / hadiah.length;
                       const start = i * angle;
                       const end = start + angle;
                       const mid = start + angle / 2;
 
-                      const labelPos = polarToCartesian(110, 110, 72, mid);
+                      const labelPos = polarToCartesian(130, 130, 90, mid);
 
                       return (
                         <G key={h.id}>
                           {/* SLICE */}
                           <Path
-                            d={describeArc(110, 110, 110, start, end)}
+                            d={describeArc(130, 130, 130, start, end)}
                             fill={i % 2 === 0 ? "#60A5FA" : "#38BDF8"}
                           />
 
@@ -2562,8 +2561,8 @@ export default function BayarSPP() {
                             x={labelPos.x}
                             y={labelPos.y}
                             fill="#0F172A"
-                            fontSize="11"
-                            fontWeight="700"
+                            fontSize="14"
+                            fontWeight="900"
                             textAnchor="middle"
                             alignmentBaseline="middle"
                           >
@@ -2575,18 +2574,18 @@ export default function BayarSPP() {
 
                     {/* CENTER */}
                     <Circle
-                      cx={110}
-                      cy={110}
-                      r={34}
+                      cx={130}
+                      cy={130}
+                      r={38}
                       fill="#0EA5E9"
                       stroke="#fff"
                       strokeWidth={4}
                     />
                     <SvgText
-                      x={110}
-                      y={110}
+                      x={130}
+                      y={130}
                       fill="#fff"
-                      fontSize="16"
+                      fontSize="18"
                       fontWeight="900"
                       textAnchor="middle"
                       alignmentBaseline="middle"
