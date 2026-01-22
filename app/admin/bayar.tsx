@@ -215,7 +215,7 @@ async function pushPaymentToSheet(payload: {
   jam: string;
 
   studentName?: string;
-  namaSiswa?: string;
+  studentType?: string; // ✅ TAMBAH
 
   jenisPembayaran: string;
   metode: "Cash" | "Transfer";
@@ -231,7 +231,7 @@ async function pushPaymentToSheet(payload: {
 }) {
   try {
     const res = await fetch(
-      "https://script.google.com/macros/s/AKfycbytbmr5VMMIm2qNKqGYI4pBm7Qh7PU5pEKLIXIUwyyo9sKcJv4MPxInMN2CrZWjWK9ViQ/exec",
+      "https://script.google.com/macros/s/AKfycbxeTvy92xA5AeTqx8hHAC-k4kz9hF5e4ro4-1honp4rGFuuHM17tz32IWeeIMbA6u0/exec",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1487,13 +1487,15 @@ export default function BayarSPP() {
       try {
         const now = new Date();
         await pushPaymentToSheet({
-          invoiceNo: invoiceDraft.paymentGroupId, // OK
+          invoiceNo: invoiceDraft.paymentGroupId,
           branchId,
           branchName,
 
           tanggal: formatTanggalOnly(now),
           jam: formatJamOnly(now),
           studentName: invoiceDraft.studentName,
+          studentType: invoiceDraft.studentType, // ✅ NEW
+
           jenisPembayaran: `SPP ${invoiceDraft.monthLabels.join(" + ")}`,
           metode: invoiceDraft.metode,
 
@@ -1503,8 +1505,7 @@ export default function BayarSPP() {
           totalVoucher,
           totalDibayar,
 
-          voucherSpinDetail, // ✅ BARU (INI PENTING)
-
+          voucherSpinDetail,
           monthKey: invoiceDraft.monthKeys?.[0] || "",
           createdAtIso: now.toISOString(),
         });
