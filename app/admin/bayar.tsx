@@ -356,21 +356,39 @@ export default function BayarSPP() {
   }
 
   const spinAnim = useRef(new Animated.Value(0)).current;
+  const spinTargetDeg = useRef(0); // ✅ FIX ERROR
 
-  function animateSpin(onDone?: () => void) {
+  function animateSpinToIndex(
+    targetIndex: number,
+    totalSlice: number,
+    onDone?: () => void,
+  ) {
     spinAnim.setValue(0);
+
+    const anglePerSlice = 360 / totalSlice;
+
+    // posisi tengah slice
+    const sliceCenter = targetIndex * anglePerSlice + anglePerSlice / 2;
+
+    // pointer di atas (270deg)
+    const pointerDeg = 0; // ✅ jam 12 (SVG native)
+
+    // sudut akhir agar slice tepat di pointer
+    const targetDeg = 360 * 4 + (pointerDeg - sliceCenter);
+
+    spinTargetDeg.current = targetDeg;
 
     Animated.timing(spinAnim, {
       toValue: 1,
-      duration: 3200,
-      easing: Easing.out(Easing.cubic),
+      duration: 3600,
+      easing: Easing.out(Easing.cubic), // 🔥 smooth stop
       useNativeDriver: true,
     }).start(() => onDone?.());
   }
 
   const rotate = spinAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ["0deg", `${360 * (3 + Math.random() * 3)}deg`],
+    outputRange: ["0deg", `${spinTargetDeg.current}deg`],
   });
 
   const insets = useSafeAreaInsets();
@@ -2645,16 +2663,28 @@ export default function BayarSPP() {
                 disabled={spinWheelRunning}
                 onPress={async () => {
                   setSpinWheelRunning(true);
-                  animateSpin(async () => {
-                    try {
-                      const res = await spinNext();
-                      if (res) {
+
+                  try {
+                    // 🔥 tentukan hadiah dulu
+                    const res = await spinNext();
+                    if (!res) return;
+
+                    // cari index slice hadiah
+                    const targetIndex = hadiah.findIndex(
+                      (h) => h.label === res.label,
+                    );
+
+                    animateSpinToIndex(
+                      targetIndex === -1 ? 0 : targetIndex,
+                      hadiah.length,
+                      () => {
                         setSpinWheelResult(res);
-                      }
-                    } finally {
-                      setSpinWheelRunning(false);
-                    }
-                  });
+                        setSpinWheelRunning(false);
+                      },
+                    );
+                  } catch (e) {
+                    setSpinWheelRunning(false);
+                  }
                 }}
               >
                 {spinWheelRunning ? (
