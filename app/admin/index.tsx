@@ -27,12 +27,12 @@ import { auth, db } from "../../firebase";
 
 import { Linking } from "react-native";
 const SPREADSHEET_BASE_URL =
-  "https://docs.google.com/spreadsheets/d/1GpLi4R5CZgvAszNPBFcgPPclLsljhCs_6JU0Ix5zO0g/edit";
+  "https://docs.google.com/spreadsheets/d/1DE0FwlqtTKN4Uj3ZcfiRYARoYLnPKXcy-iZXxcEKFqw/edit";
 
 const BRANCH_SHEET_GID: Record<string, string> = {
-  "Unit Ngunut": "1186165288",
-  "Unit Balesono": "901725034",
-  "Unit Gragalan": "1212330600",
+  "Unit Ngunut": "927057948",
+  "Unit Balesono": "1433542643",
+  "Unit Gragalan": "997628420",
 };
 
 function getSpreadsheetUrlForBranchName(branchName: string) {
