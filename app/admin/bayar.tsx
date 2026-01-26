@@ -1350,8 +1350,26 @@ export default function BayarSPP() {
     }
   }
 
+  function resolveSpinForPaidMonth(
+    paidMonthKey: string,
+    spinByMonth: Record<string, number>,
+  ) {
+    const target = nextMonthKey(paidMonthKey);
+    return Math.max(Number(spinByMonth?.[target] || 0), 0);
+  }
+
   // ===================== PAY =====================
   async function confirmPay() {
+    // 🔥 PENAMPUNG DATA UNTUK SPREADSHEET (DIISI SAAT TRANSACTION)
+    const sheetRows: {
+      mk: string;
+      label: string;
+      nominal: number;
+      spin: number;
+      manual: number;
+      total: number;
+    }[] = [];
+
     if (!invoiceDraft || !branchId || !selected) return;
 
     try {
@@ -1438,11 +1456,11 @@ export default function BayarSPP() {
         });
 
         // ✅ simpan potongan manual (voucher)
-        for (const mk of monthKeys) {
-          const spinRef = doc(db, "student_discounts", `${selected.id}_${mk}`);
-          const spinSnap = await trx.get(spinRef);
+        discSnaps.forEach((snap, i) => {
+          if (!snap.exists()) return;
 
-          if (!spinSnap.exists()) continue;
+          const mk = discRefs[i].mk;
+          const spinRef = discRefs[i].ref;
 
           if (discountMode === "SPIN" || discountMode === "BOTH") {
             trx.update(spinRef, {
@@ -1459,7 +1477,8 @@ export default function BayarSPP() {
               expiredByPaymentGroupId: invoiceDraft.paymentGroupId,
             });
           }
-        }
+        });
+
         for (const mk of monthKeys) {
           const manualPot = manualDiscounts?.[mk];
           if (!manualPot || manualPot <= 0) continue;
@@ -1485,17 +1504,18 @@ export default function BayarSPP() {
           // ✅ FIX ERROR: nominal HARUS didefinisikan
           const nominal = Number(selected.spp || 0);
 
+          const pot = Math.max(
+            Number(invoiceDraft.potonganByMonth?.[mk] || 0),
+            0,
+          );
+
           const spin =
             discountMode === "MANUAL"
               ? 0
-              : Math.max(Number(invoiceDraft.spinByMonth?.[mk] || 0), 0);
+              : resolveSpinForPaidMonth(mk, invoiceDraft.spinByMonth);
 
-          const manual =
-            discountMode === "SPIN"
-              ? 0
-              : Math.max(Number(manualDiscounts?.[mk] || 0), 0);
+          const manual = 0; // manual sudah tergabung di pot
 
-          const pot = spin + manual;
           const total = Math.max(nominal - pot, 0);
 
           const payload: any = {
@@ -1532,6 +1552,16 @@ export default function BayarSPP() {
 
           trx.set(ref, payload);
           trx.set(doc(db, "payments", invId), payload);
+
+          // 🔥 SIMPAN UNTUK SPREADSHEET (JANGAN PUSH DI SINI)
+          sheetRows.push({
+            mk,
+            label: labelMk,
+            nominal,
+            spin,
+            manual,
+            total,
+          });
         }
 
         trx.set(doc(db, "payment_groups", invoiceDraft.paymentGroupId), {
@@ -1555,6 +1585,43 @@ export default function BayarSPP() {
           proofType: proofType || null,
         });
       });
+
+      try {
+        const now = new Date();
+
+        for (const row of sheetRows) {
+          await pushPaymentToSheet({
+            invoiceNo: invoiceDraft.paymentGroupId,
+            branchId,
+            branchName,
+
+            tanggal: formatTanggalOnly(now),
+            jam: formatJamOnly(now),
+
+            studentName: invoiceDraft.studentName,
+            studentType: invoiceDraft.studentType,
+
+            jenisPembayaran: `SPP ${row.label}`,
+            metode: invoiceDraft.metode,
+
+            nominalSebelumVoucher: row.nominal,
+            voucherSpin: row.spin,
+            voucherManual: row.manual,
+            totalVoucher: row.spin + row.manual,
+            totalDibayar: row.total,
+
+            voucherSpinDetail:
+              row.spin > 0
+                ? `Untuk ${monthLabelOf(new Date(nextMonthKey(row.mk) + "-01"))}: ${row.spin}`
+                : "",
+
+            monthKey: row.mk,
+            createdAtIso: now.toISOString(),
+          });
+        }
+      } catch (e) {
+        console.log("push sheet (pay) error:", e);
+      }
 
       setInvoiceDraft((p) =>
         p
@@ -1599,34 +1666,58 @@ export default function BayarSPP() {
       // total yang benar-benar dibayar
       const totalDibayar = invoiceDraft.total;
 
-      try {
-        const now = new Date();
-        await pushPaymentToSheet({
-          invoiceNo: invoiceDraft.paymentGroupId,
-          branchId,
-          branchName,
+      // try {
+      //   const now = new Date();
 
-          tanggal: formatTanggalOnly(now),
-          jam: formatJamOnly(now),
-          studentName: invoiceDraft.studentName,
-          studentType: invoiceDraft.studentType, // ✅ NEW
+      //   // 🔥 LOOP PER BULAN → 1 BULAN = 1 BARIS SPREADSHEET
+      //   for (let i = 0; i < invoiceDraft.monthKeys.length; i++) {
+      //     const mk = invoiceDraft.monthKeys[i];
+      //     const label = invoiceDraft.monthLabels[i];
 
-          jenisPembayaran: `SPP ${invoiceDraft.monthLabels.join(" + ")}`,
-          metode: invoiceDraft.metode,
+      //     const nominal = Number(selected.spp || 0);
 
-          nominalSebelumVoucher,
-          voucherSpin,
-          voucherManual,
-          totalVoucher,
-          totalDibayar,
+      //     const spin =
+      //       discountMode === "MANUAL"
+      //         ? 0
+      //         : Math.max(Number(invoiceDraft.spinByMonth?.[mk] || 0), 0);
 
-          voucherSpinDetail,
-          monthKey: invoiceDraft.monthKeys?.[0] || "",
-          createdAtIso: now.toISOString(),
-        });
-      } catch (e) {
-        console.log("push sheet (pay) error:", e);
-      }
+      //     const manual =
+      //       discountMode === "SPIN"
+      //         ? 0
+      //         : Math.max(Number(manualDiscounts?.[mk] || 0), 0);
+
+      //     const totalVoucher = spin + manual;
+      //     const totalBayar = Math.max(nominal - totalVoucher, 0);
+
+      //     await pushPaymentToSheet({
+      //       invoiceNo: invoiceDraft.paymentGroupId,
+      //       branchId,
+      //       branchName,
+
+      //       tanggal: formatTanggalOnly(now),
+      //       jam: formatJamOnly(now),
+
+      //       studentName: invoiceDraft.studentName,
+      //       studentType: invoiceDraft.studentType,
+
+      //       // ✅ PENTING: PER BULAN
+      //       jenisPembayaran: `SPP ${label}`,
+      //       metode: invoiceDraft.metode,
+
+      //       nominalSebelumVoucher: nominal,
+      //       voucherSpin: spin,
+      //       voucherManual: manual,
+      //       totalVoucher,
+      //       totalDibayar: totalBayar,
+
+      //       voucherSpinDetail: spin > 0 ? `${label}: ${spin}` : "",
+      //       monthKey: mk,
+      //       createdAtIso: now.toISOString(),
+      //     });
+      //   }
+      // } catch (e) {
+      //   console.log("push sheet (pay) error:", e);
+      // }
 
       Alert.alert("✅ Lunas", "Pembayaran berhasil disimpan.");
     } catch (e: any) {

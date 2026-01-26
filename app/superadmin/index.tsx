@@ -26,7 +26,7 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
 
 const SPREADSHEET_URL =
-  "https://docs.google.com/spreadsheets/d/1GpLi4R5CZgvAszNPBFcgPPclLsljhCs_6JU0Ix5zO0g/edit?hl=id&gid=1186165288#gid=1186165288";
+  "https://docs.google.com/spreadsheets/d/1DE0FwlqtTKN4Uj3ZcfiRYARoYLnPKXcy-iZXxcEKFqw/edit?gid=1484692081#gid=1484692081";
 
 // ================= FONT MAP =================
 const F = {
