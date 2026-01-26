@@ -41,13 +41,14 @@ import { auth, db } from "../../firebase";
 type Tx = {
   id: string;
   tanggal: Date; // paidAt
-  nama: string; // studentName
-  bulan: string; // monthLabel
-  nominal: number; // total dibayar
+  nama: string;
+
+  bulanBayar: string; // ⬅️ BULAN TRANSAKSI (dari paidAt)
+
+  nominal: number;
   status: "Lunas" | "Beasiswa" | "Pending";
   metode: "Cash" | "Transfer";
 
-  // ✅ bukti pembayaran (BASE64 Data URL dari Firestore)
   proofDataUrl?: string | null;
   proofType?: "camera" | "gallery" | "upload" | null;
 };
@@ -283,22 +284,18 @@ export default function AdminRiwayatTab() {
           const metode: Tx["metode"] =
             String(data.metode || "Cash") === "Transfer" ? "Transfer" : "Cash";
 
-          const monthLabel =
-            String(data.monthLabel || "").trim() ||
-            (data.monthKey
-              ? monthLabelFromKey(String(data.monthKey))
-              : bulanIndo(paidAt));
-
           return {
             id: d.id,
             tanggal: paidAt,
-            nama: String(data.studentName || data.nama || "-").trim() || "-",
-            bulan: monthLabel,
+            nama: String(data.studentName || "-").trim() || "-",
+
+            // ✅ FIX UTAMA
+            bulanBayar: bulanIndo(paidAt),
+
             nominal: Number(total || nominal || 0) || 0,
             status,
             metode,
 
-            // ✅ FIX: baca field yang benar dari bayar.tsx
             proofDataUrl: data.proofDataUrl || null,
             proofType: (data.proofType as any) || null,
           };
@@ -396,7 +393,7 @@ export default function AdminRiwayatTab() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={[]}>
       <LinearGradient
-        colors={["#BFE9FF", "#EAF6FF", "#F7FBFF"]}
+        colors={["#F8FAFC", "#F8FAFC"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
@@ -412,7 +409,7 @@ export default function AdminRiwayatTab() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.brand}>Shining Sun 🎈</Text>
+          <Text style={styles.brand}>Shining Sun</Text>
           <View style={styles.chip}>
             <Text style={styles.chipText}>
               {headerLoading ? "Memuat..." : branchName}
@@ -529,9 +526,10 @@ export default function AdminRiwayatTab() {
                               {x.nama}
                             </Text>
                             <Text style={styles.sub}>
-                              {x.bulan} • {x.metode}
+                              Dibayar: {x.bulanBayar} • {x.metode}
                               {hasProof ? " • Bukti" : ""}
                             </Text>
+
                             <Text style={styles.money}>
                               Rp {x.nominal.toLocaleString("id-ID")}
                             </Text>
@@ -583,6 +581,24 @@ export default function AdminRiwayatTab() {
 
         <View style={{ height: Platform.OS === "ios" ? 8 : 16 }} />
       </ScrollView>
+      {/* ANDROID DATE PICKER (NATIVE, TANPA MODAL) */}
+      {Platform.OS === "android" && androidPicker === "from" && (
+        <DateTimePicker
+          value={fromDate}
+          mode="date"
+          display="calendar"
+          onChange={onChangeFrom}
+        />
+      )}
+
+      {Platform.OS === "android" && androidPicker === "to" && (
+        <DateTimePicker
+          value={toDate}
+          mode="date"
+          display="calendar"
+          onChange={onChangeTo}
+        />
+      )}
 
       {/* ✅ MODAL PREVIEW BUKTI */}
       <Modal
@@ -617,7 +633,8 @@ export default function AdminRiwayatTab() {
                 {/* Detail transaksi */}
                 <View style={styles.detailCard}>
                   <DetailRow label="Nama" value={previewTx.nama} />
-                  <DetailRow label="Periode" value={previewTx.bulan} />
+                  <DetailRow label="Bulan Bayar" value={previewTx.bulanBayar} />
+
                   <DetailRow
                     label="Tanggal"
                     value={formatTanggal(previewTx.tanggal)}
@@ -654,7 +671,7 @@ export default function AdminRiwayatTab() {
       )}
 
       {/* Android modal picker */}
-      <Modal visible={androidPicker !== null} transparent animationType="fade">
+      {/* <Modal visible={androidPicker !== null} transparent animationType="fade">
         <View style={styles.backdrop}>
           <View style={styles.pickerCard}>
             <View style={styles.rowBetween}>
@@ -683,7 +700,7 @@ export default function AdminRiwayatTab() {
             </Text>
           </View>
         </View>
-      </Modal>
+      </Modal> */}
     </SafeAreaView>
   );
 }
@@ -751,9 +768,11 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontWeight: "900",
-    color: "#1D4ED8",
-    letterSpacing: 0.3,
+    color: "#0F172A",
+    letterSpacing: 0.2,
+    fontSize: 16,
   },
+
   chip: {
     backgroundColor: "rgba(219,234,254,0.95)",
     paddingHorizontal: 10,
@@ -783,17 +802,13 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    backgroundColor: "rgba(255,255,255,0.92)",
-    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.95)",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 2,
+    borderColor: "#E5E7EB",
   },
+
   cardTitle: { fontSize: 16, fontWeight: "900", color: "#0F172A" },
 
   rowBetween: {
@@ -811,30 +826,36 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   dateBtn: {
-    marginTop: 8,
-    height: 48,
-    borderRadius: 16,
+    marginTop: 6,
+    height: 44,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#CBD5E1",
     backgroundColor: "#FFFFFF",
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
+
   dateText: { fontWeight: "900", color: "#0F172A", fontSize: 13 },
 
   applyBtn: {
     marginTop: 14,
-    backgroundColor: "#0EA5E9",
-    paddingVertical: 14,
-    borderRadius: 18,
+    backgroundColor: "#3B82F6", // biru muda (blue-500)
+    paddingVertical: 12,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
   },
-  applyText: { color: "white", fontWeight: "900", fontSize: 15 },
+
+  applyText: {
+    color: "white",
+    fontWeight: "800",
+    fontSize: 14,
+  },
 
   badgeCount: {
     backgroundColor: "#DBEAFE",
@@ -847,40 +868,63 @@ const styles = StyleSheet.create({
   badgeText: { fontWeight: "900", fontSize: 12, color: "#0F172A" },
 
   dayHeader: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(219,234,254,0.95)",
-    borderWidth: 1,
-    borderColor: "rgba(191,219,254,1)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
+    alignSelf: "stretch",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    paddingBottom: 6,
   },
-  dayText: { fontWeight: "900", color: "#0F172A", fontSize: 12 },
+  dayText: {
+    fontWeight: "800",
+    color: "#334155",
+    fontSize: 12,
+  },
 
   txItem: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 14,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#E5E7EB",
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
   },
-  name: { fontWeight: "900", color: "#0F172A", fontSize: 15 },
-  sub: { marginTop: 6, color: "#64748B", fontWeight: "700", fontSize: 12 },
-  money: { marginTop: 6, fontWeight: "900", color: "#0F172A", fontSize: 16 },
+
+  name: {
+    fontWeight: "800",
+    color: "#0F172A",
+    fontSize: 14,
+  },
+
+  sub: {
+    marginTop: 4,
+    color: "#64748B",
+    fontWeight: "600",
+    fontSize: 11,
+  },
+
+  money: {
+    marginTop: 6,
+    fontWeight: "900",
+    color: "#020617",
+    fontSize: 15,
+  },
 
   badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
     borderWidth: 1,
   },
   badgeOk: { backgroundColor: "#DCFCE7", borderColor: "#BBF7D0" },
   badgeInfo: { backgroundColor: "#DBEAFE", borderColor: "#BFDBFE" },
   badgeWarn: { backgroundColor: "#FEF9C3", borderColor: "#FDE68A" },
-  badgeText2: { fontWeight: "900", fontSize: 12, color: "#0F172A" },
+  badgeText2: {
+    fontWeight: "800",
+    fontSize: 11,
+    color: "#020617",
+  },
 
   thumb: {
     width: 52,
@@ -925,7 +969,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(226,232,240,0.95)",
   },
-  modalTitle: { fontSize: 16, fontWeight: "900", color: "#0F172A" },
+  modalTitle: {
+    fontSize: 15,
+    fontWeight: "900",
+    color: "#020617",
+  },
+
   xBtn: {
     width: 34,
     height: 34,
@@ -945,13 +994,14 @@ const styles = StyleSheet.create({
   },
   previewCard: {
     width: "100%",
-    maxWidth: 430,
-    backgroundColor: "#fff",
-    borderRadius: 22,
+    maxWidth: 420,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: "rgba(226,232,240,0.95)",
+    borderColor: "#E5E7EB",
   },
+
   previewImg: {
     width: "100%",
     height: 360,

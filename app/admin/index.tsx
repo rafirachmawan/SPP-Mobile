@@ -25,7 +25,6 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
-import { Linking } from "react-native";
 const SPREADSHEET_BASE_URL =
   "https://docs.google.com/spreadsheets/d/1DE0FwlqtTKN4Uj3ZcfiRYARoYLnPKXcy-iZXxcEKFqw/edit";
 
@@ -268,7 +267,7 @@ export default function AdminDashboard() {
             </TouchableOpacity>
           ))}
         </View>
-        <TouchableOpacity
+        {/* <TouchableOpacity
           activeOpacity={0.9}
           onPress={() => {
             if (!branchId) return;
@@ -292,7 +291,7 @@ export default function AdminDashboard() {
           </View>
 
           <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
         <View style={{ height: 16 }} />
       </ScrollView>

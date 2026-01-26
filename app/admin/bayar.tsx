@@ -231,7 +231,7 @@ async function pushPaymentToSheet(payload: {
 }) {
   try {
     const res = await fetch(
-      "https://script.google.com/macros/s/AKfycbwWTGcUdbH4B0bGOn59dUFQDd-VOtrLosVmkjLKRQCc2usKQ4Xwp9qjPPDHP6ph4D2-/exec",
+      "https://script.google.com/macros/s/AKfycbwNecVuAyPj52GS3c0090G9ThggfW3acu-p64DQEuQETR1RmN5O5uHZhZH6Z5UiTv5VIw/exec",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
