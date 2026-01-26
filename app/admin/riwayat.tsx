@@ -40,17 +40,35 @@ import { auth, db } from "../../firebase";
 
 type Tx = {
   id: string;
-  tanggal: Date; // paidAt
-  nama: string;
 
-  bulanBayar: string; // ⬅️ BULAN TRANSAKSI (dari paidAt)
+  // waktu
+  tanggal: Date;
+  jam?: string;
 
+  // ✅ WAJIB ADA (dipakai di UI)
+  bulanBayar: string;
   nominal: number;
-  status: "Lunas" | "Beasiswa" | "Pending";
+
+  // identitas
+  branchName?: string;
+  nama: string;
+  tipeSiswa?: string;
+
+  // pembayaran
+  jenisPembayaran?: string;
   metode: "Cash" | "Transfer";
 
+  nominalSebelumVoucher?: number;
+  voucherSpin?: number;
+  voucherManual?: number;
+  totalVoucher?: number;
+  detailVoucherSpin?: string;
+
+  totalBayar: number;
+
+  status: "Lunas" | "Beasiswa" | "Pending";
+
   proofDataUrl?: string | null;
-  proofType?: "camera" | "gallery" | "upload" | null;
 };
 
 function pad2(n: number) {
@@ -116,6 +134,13 @@ function DetailRow({
       </Text>
     </View>
   );
+}
+
+function nextMonthLabelFromKey(monthKey?: string) {
+  if (!monthKey) return "-";
+  const [y, m] = monthKey.split("-").map(Number);
+  if (!y || !m) return "-";
+  return bulanIndo(new Date(y, m, 1)); // bulan +1 otomatis
 }
 
 export default function AdminRiwayatTab() {
@@ -270,34 +295,74 @@ export default function AdminRiwayatTab() {
             ? data.paidAt.toDate()
             : new Date();
 
-          const nominal = Number(data.nominal || 0) || 0;
-          const total = Number(data.total || 0) || 0;
+          const nominalSebelumVoucher = Number(data.nominalSebelumVoucher || 0);
+          const voucherSpin = Number(data.voucherSpin || 0);
+          let detailVoucherSpin = "-";
 
-          const rawStatus = String(data.status || "PAID").toUpperCase();
-          const status: Tx["status"] =
-            rawStatus !== "PAID"
-              ? "Pending"
-              : total <= 0 || nominal <= 0
-                ? "Beasiswa"
-                : "Lunas";
+          if (
+            Array.isArray(data.voucherSpinEarned) &&
+            data.voucherSpinEarned.length > 0
+          ) {
+            detailVoucherSpin = data.voucherSpinEarned
+              .map(
+                (v: any) =>
+                  `Untuk ${monthLabelFromKey(v.monthKey)}: ${Number(v.nominal).toLocaleString("id-ID")}`,
+              )
+              .join(", ");
+          }
+
+          const voucherManual = Number(data.voucherManual || 0);
+          const totalVoucher = Number(data.totalVoucher || 0);
+          const totalBayar = Number(data.totalBayar || 0);
+
+          // status PURE dari hasil bayar
+          let status: Tx["status"] = "Lunas";
+          if (totalBayar === 0 && totalVoucher > 0) status = "Beasiswa";
+          if (data.status === "Pending") status = "Pending";
 
           const metode: Tx["metode"] =
             String(data.metode || "Cash") === "Transfer" ? "Transfer" : "Cash";
 
+          function formatJam(d: Date) {
+            return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+          }
+
           return {
             id: d.id,
+
             tanggal: paidAt,
-            nama: String(data.studentName || "-").trim() || "-",
+            jam: data.jam || formatJam(paidAt),
 
-            // ✅ FIX UTAMA
-            bulanBayar: bulanIndo(paidAt),
+            branchName: branchName,
+            nama: String(data.studentName || data.namaSiswa || "-"),
+            tipeSiswa: String(data.studentType || "-"),
 
-            nominal: Number(total || nominal || 0) || 0,
-            status,
+            jenisPembayaran: data.jenisPembayaran
+              ? String(data.jenisPembayaran)
+              : data.monthLabel
+                ? `SPP ${data.monthLabel}`
+                : "-",
+
             metode,
 
+            nominalSebelumVoucher,
+            voucherSpin,
+            voucherManual,
+            totalVoucher,
+            detailVoucherSpin,
+
+            totalBayar,
+
+            bulanBayar: data.jenisPembayaran
+              ? String(data.jenisPembayaran)
+              : data.monthLabel
+                ? `SPP ${data.monthLabel}`
+                : "-",
+
+            nominal: totalBayar,
+            status,
+
             proofDataUrl: data.proofDataUrl || null,
-            proofType: (data.proofType as any) || null,
           };
         });
 
@@ -326,6 +391,19 @@ export default function AdminRiwayatTab() {
       return time >= f.getTime() && time <= t.getTime();
     });
   }, [txs, appliedFrom, appliedTo]);
+
+  // =========================
+  // ✅ HITUNG OMSET (BERDASARKAN TANGGAL BAYAR)
+  // =========================
+  const totalOmset = useMemo(() => {
+    return filtered.reduce((sum, tx) => {
+      // ❗ hanya uang masuk nyata
+      if (tx.status === "Lunas") {
+        return sum + (tx.totalBayar || 0);
+      }
+      return sum;
+    }, 0);
+  }, [filtered]);
 
   const grouped = useMemo(() => {
     const groups: { date: Date; items: Tx[] }[] = [];
@@ -480,8 +558,17 @@ export default function AdminRiwayatTab() {
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>Daftar Transaksi</Text>
-            <View style={styles.badgeCount}>
-              <Text style={styles.badgeText}>{filtered.length} trx</Text>
+
+            <View style={{ alignItems: "flex-end", gap: 4 }}>
+              <View style={styles.badgeCount}>
+                <Text style={styles.badgeText}>{filtered.length} trx</Text>
+              </View>
+
+              <Text
+                style={{ fontWeight: "900", color: "#0F172A", fontSize: 13 }}
+              >
+                Omset: Rp {totalOmset.toLocaleString("id-ID")}
+              </Text>
             </View>
           </View>
 
@@ -531,7 +618,7 @@ export default function AdminRiwayatTab() {
                             </Text>
 
                             <Text style={styles.money}>
-                              Rp {x.nominal.toLocaleString("id-ID")}
+                              Rp {(x.nominal ?? 0).toLocaleString("id-ID")}
                             </Text>
                           </View>
 
@@ -632,14 +719,60 @@ export default function AdminRiwayatTab() {
 
                 {/* Detail transaksi */}
                 <View style={styles.detailCard}>
-                  <DetailRow label="Nama" value={previewTx.nama} />
-                  <DetailRow label="Bulan Bayar" value={previewTx.bulanBayar} />
-
+                  <DetailRow
+                    label="Cabang"
+                    value={previewTx.branchName || "-"}
+                  />
                   <DetailRow
                     label="Tanggal"
                     value={formatTanggal(previewTx.tanggal)}
                   />
+                  <DetailRow label="Jam" value={previewTx.jam || "-"} />
+
+                  <DetailRow label="Nama Siswa" value={previewTx.nama} />
+                  <DetailRow
+                    label="Tipe Siswa"
+                    value={previewTx.tipeSiswa || "-"}
+                  />
+
+                  <DetailRow
+                    label="Jenis Pembayaran"
+                    value={previewTx.jenisPembayaran || "-"}
+                  />
+
                   <DetailRow label="Metode" value={previewTx.metode} />
+
+                  <DetailRow
+                    label="Nominal Awal"
+                    value={`Rp ${(previewTx.nominalSebelumVoucher ?? 0).toLocaleString("id-ID")}`}
+                  />
+
+                  <DetailRow
+                    label="Voucher Spin"
+                    value={`Rp ${(previewTx.voucherSpin ?? 0).toLocaleString("id-ID")}`}
+                  />
+
+                  <DetailRow
+                    label="Voucher Manual"
+                    value={`Rp ${(previewTx.voucherManual ?? 0).toLocaleString("id-ID")}`}
+                  />
+
+                  <DetailRow
+                    label="Total Voucher"
+                    value={`Rp ${(previewTx.totalVoucher ?? 0).toLocaleString("id-ID")}`}
+                  />
+
+                  <DetailRow
+                    label="Detail Voucher"
+                    value={previewTx.detailVoucherSpin || "-"}
+                  />
+
+                  <DetailRow
+                    label="Total Bayar"
+                    value={`Rp ${(previewTx.totalBayar ?? 0).toLocaleString("id-ID")}`}
+                    bold
+                  />
+
                   <DetailRow label="Status" value={previewTx.status} bold />
                 </View>
               </>

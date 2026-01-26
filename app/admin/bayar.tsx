@@ -231,7 +231,7 @@ async function pushPaymentToSheet(payload: {
 }) {
   try {
     const res = await fetch(
-      "https://script.google.com/macros/s/AKfycbwNecVuAyPj52GS3c0090G9ThggfW3acu-p64DQEuQETR1RmN5O5uHZhZH6Z5UiTv5VIw/exec",
+      "https://script.google.com/macros/s/AKfycbwosH8BNOrkPvYzXXjh65aLT7fFIxvtm_VZ-Q7IcTfJt8j2VeXU2QnT833t3AjcFm2ANw/exec",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1518,10 +1518,37 @@ export default function BayarSPP() {
 
           const total = Math.max(nominal - pot, 0);
 
+          const nominalSebelumVoucher = nominal;
+
+          // ✅ voucher spin hanya boleh dipakai jika ADA voucher di BULAN YANG DIBAYAR
+          // 🔒 FIX: voucher spin TIDAK dipakai untuk bulan ini
+          const voucherSpin = 0;
+
+          // 🔥 voucher yang DIDAPAT untuk BULAN DEPAN
+          const voucherSpinEarned = Object.entries(
+            invoiceDraft.spinByMonth || {},
+          )
+            .filter(([_, v]) => v && v > 0)
+            .map(([targetMk, v]) => ({
+              monthKey: targetMk,
+              nominal: v,
+            }));
+
+          const voucherManual =
+            discountMode === "SPIN"
+              ? 0
+              : Math.max(Number(manualDiscounts?.[mk] || 0), 0);
+
+          // 🔒 FIX: total bayar hanya dikurangi voucher MANUAL
+          const totalVoucher = voucherManual;
+          const totalBayar = Math.max(nominalSebelumVoucher - voucherManual, 0);
+
           const payload: any = {
             invoiceNo: invId,
             monthKey: mk,
             monthLabel: labelMk,
+
+            jenisPembayaran: `SPP ${labelMk}`, // ✅ FIX
 
             studentId: selected.id,
             studentName: selected.name,
@@ -1530,17 +1557,27 @@ export default function BayarSPP() {
             branchId,
             branchName,
 
+            // ✅ FIELD YANG DIBACA RIWAYAT
+            nominalSebelumVoucher,
+            voucherSpin,
+            voucherManual,
+            totalVoucher,
+            totalBayar,
+
+            voucherSpinEarned,
+
+            // 🟡 FIELD LAMA (TETAP DISIMPAN, BOLEH)
             nominal,
-            potongan: pot,
-            total,
+            potongan: totalVoucher,
+            total: totalBayar,
 
             metode: invoiceDraft.metode,
             status: "PAID",
             paidAt: serverTimestamp(),
             paidByUid: u.uid,
-            createdAt: serverTimestamp(),
 
             paymentGroupId: invoiceDraft.paymentGroupId,
+            createdAt: serverTimestamp(),
           };
 
           if (proofDataUrl) {
