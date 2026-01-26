@@ -185,7 +185,7 @@ function buildPotonganByMonth(
 
   for (const mk of draft.monthKeys) {
     // 🔹 spin dari draft awal (hasil load Firestore)
-    const spinPot = Math.max(Number(draft.potonganByMonth?.[mk] || 0), 0);
+    const spinPot = Math.max(Number(draft.spinByMonth?.[mk] || 0), 0);
 
     // 🔹 manual dari input admin
     const manualPot = Math.max(Number(manual?.[mk] || 0), 0);
@@ -652,6 +652,10 @@ export default function BayarSPP() {
     Record<string, number>
   >({});
 
+  const [discountMode, setDiscountMode] = useState<"SPIN" | "MANUAL" | "BOTH">(
+    "SPIN",
+  );
+
   const [manualDiscountInput, setManualDiscountInput] = useState<
     Record<string, string>
   >({});
@@ -692,6 +696,26 @@ export default function BayarSPP() {
     return nextMonthKey(paidMonthKey);
   }
 
+  function canSpinForPaidMonth(paidMonthKey: string, sebelumTanggal: number) {
+    const now = new Date();
+
+    const [y, m] = paidMonthKey.split("-").map(Number);
+
+    // ⛔ batas: tanggal 11 di BULAN YANG DIBAYAR
+    const deadline = new Date(y, m - 1, sebelumTanggal, 23, 59, 59);
+
+    return now <= deadline;
+  }
+
+  function isFutureMonth(paidMonthKey: string) {
+    const now = new Date();
+    const currentKey = monthKeyOf(
+      new Date(now.getFullYear(), now.getMonth(), 1),
+    );
+
+    return paidMonthKey > currentKey;
+  }
+
   /**
    * ✅ FIX: Eligible spin = semua bulan yang dipilih KECUALI bulan pertama (paling awal) di selection.
    * Contoh: Jan+Feb+Mar => eligible: Feb, Mar (2x spin)
@@ -703,11 +727,15 @@ export default function BayarSPP() {
     const order = monthOptions.map((m) => m.key);
     const result = new Set<string>();
 
-    const today = new Date();
-    if (today.getDate() >= sebelumTanggal) return [];
-
     for (const paidMk of paidKeys) {
-      const targetMk = nextMonthKey(paidMk); // 🔥 FIX
+      // 🚫 1️⃣ BLOK BULAN SEKARANG & BULAN LALU
+      if (!isFutureMonth(paidMk)) continue;
+
+      // 🚫 2️⃣ CEK DEADLINE TANGGAL 11 DI BULAN YANG DIBAYAR
+      if (!canSpinForPaidMonth(paidMk, sebelumTanggal)) continue;
+
+      // 🎯 3️⃣ SPIN UNTUK BULAN SETELAHNYA
+      const targetMk = nextMonthKey(paidMk);
 
       if (!order.includes(targetMk)) continue;
       if (paidMonthsMap?.[targetMk]?.paid) continue;
@@ -832,7 +860,7 @@ export default function BayarSPP() {
       p ? { ...p, proofDataUrl: null, proofMime: null, proofType: null } : p,
     );
   }
-  const spinByMonth: Record<string, number> = {};
+  // const spinByMonth: Record<string, number> = {};
 
   // ===================== BUILD DRAFT =====================
   async function buildDraftForMonths(
@@ -840,6 +868,7 @@ export default function BayarSPP() {
     months: { key: string; label: string }[],
     keepPaymentGroupId?: string,
   ) {
+    const spinByMonth: Record<string, number> = {}; // ✅ PINDAH KE SINI
     const now = new Date();
     const monthKeys = months.map((m) => m.key);
     const monthLabels = months.map((m) => m.label);
@@ -865,9 +894,10 @@ export default function BayarSPP() {
       spinSnaps.forEach((spinSnap, idx) => {
         const mk = monthKeys[idx];
 
-        const spinPot = spinSnap.exists()
-          ? Math.max(Number((spinSnap.data() as any)?.nominal || 0), 0)
-          : 0;
+        const spinPot =
+          spinSnap.exists() && spinSnap.data()?.status === "AVAILABLE"
+            ? Math.max(Number(spinSnap.data()?.nominal || 0), 0)
+            : 0;
 
         const manualPot = manualSnaps[idx]?.exists()
           ? Math.max(Number((manualSnaps[idx].data() as any)?.nominal || 0), 0)
@@ -897,8 +927,8 @@ export default function BayarSPP() {
       keepPaymentGroupId || `PAY-${branchId}-${Date.now()}-${s.id}`;
 
     const draft: InvoiceDraft = {
-      potonganByMonth, // hanya spin
-      spinByMonth, // ⬅️ sumber murni
+      spinByMonth, // ⬅️ SUMBER SPIN
+      potonganByMonth, // ⬅️ HASIL (spin + manual)
       potongan: potonganTotal,
       total,
       paymentGroupId,
@@ -929,8 +959,13 @@ export default function BayarSPP() {
     const potonganByMonth: Record<string, number> = {};
 
     for (const mk of draft.monthKeys) {
-      const spinPot = Math.max(Number(draft.spinByMonth?.[mk] || 0), 0);
-      const manualPot = Math.max(Number(manual?.[mk] || 0), 0);
+      const spinPot =
+        discountMode === "MANUAL"
+          ? 0
+          : Math.max(Number(draft.spinByMonth?.[mk] || 0), 0);
+
+      const manualPot =
+        discountMode === "SPIN" ? 0 : Math.max(Number(manual?.[mk] || 0), 0);
 
       const totalPot = spinPot + manualPot;
 
@@ -946,6 +981,34 @@ export default function BayarSPP() {
       potongan: potonganTotal,
       total,
     };
+  }
+
+  // 🔥 FIX REALTIME: rebuild invoice saat discountMode berubah
+  useEffect(() => {
+    if (!invoiceDraft) return;
+
+    setInvoiceDraft((p) =>
+      p ? applyManualDiscountToDraft(p, manualDiscounts) : p,
+    );
+  }, [discountMode]);
+
+  function applySpinResultToDraft(
+    draft: InvoiceDraft,
+    spinMonthKey: string,
+    nominal: number,
+  ) {
+    const nextSpinByMonth = {
+      ...draft.spinByMonth,
+      [spinMonthKey]: nominal,
+    };
+
+    const nextDraft = {
+      ...draft,
+      spinByMonth: nextSpinByMonth,
+    };
+
+    // 🔥 rebuild total & potongan (ikut mode SPIN / BOTH)
+    return applyManualDiscountToDraft(nextDraft, manualDiscounts);
   }
 
   // ===================== LOAD STATUS BULAN TERBAYAR =====================
@@ -1253,6 +1316,7 @@ export default function BayarSPP() {
           monthKey: currentMk,
           label: picked.label,
           nominal,
+          status: "AVAILABLE", // 🔥 INI YANG HILANG
           createdAt: serverTimestamp(),
         });
 
@@ -1270,6 +1334,11 @@ export default function BayarSPP() {
 
       setLastSpinAwardTotal((p) => p + result.nominal);
       setLastSpinNominal(result.nominal);
+
+      // ✅ LANGSUNG MASUKKAN KE INVOICE
+      setInvoiceDraft((p) =>
+        p ? applySpinResultToDraft(p, currentMk, result.nominal) : p,
+      );
 
       return result;
     } catch (e: any) {
@@ -1370,35 +1439,63 @@ export default function BayarSPP() {
 
         // ✅ simpan potongan manual (voucher)
         for (const mk of monthKeys) {
-          const manualPot = manualDiscounts?.[mk];
-          if (manualPot && manualPot > 0) {
-            const ref = doc(db, "manual_discounts", `${selected.id}_${mk}`);
+          const spinRef = doc(db, "student_discounts", `${selected.id}_${mk}`);
+          const spinSnap = await trx.get(spinRef);
 
-            trx.set(ref, {
-              studentId: selected.id,
-              studentName: selected.name,
-              branchId,
-              branchName,
-              monthKey: mk,
-              nominal: manualPot,
-              createdAt: serverTimestamp(),
-              createdByUid: u.uid,
-              source: "MANUAL",
-              sourcePaymentGroupId: invoiceDraft.paymentGroupId,
+          if (!spinSnap.exists()) continue;
+
+          if (discountMode === "SPIN" || discountMode === "BOTH") {
+            trx.update(spinRef, {
+              status: "USED",
+              usedAt: serverTimestamp(),
+              usedByPaymentGroupId: invoiceDraft.paymentGroupId,
             });
           }
+
+          if (discountMode === "MANUAL") {
+            trx.update(spinRef, {
+              status: "EXPIRED",
+              expiredAt: serverTimestamp(),
+              expiredByPaymentGroupId: invoiceDraft.paymentGroupId,
+            });
+          }
+        }
+        for (const mk of monthKeys) {
+          const manualPot = manualDiscounts?.[mk];
+          if (!manualPot || manualPot <= 0) continue;
+
+          trx.set(doc(db, "manual_discounts", `${selected.id}_${mk}`), {
+            studentId: selected.id,
+            studentName: selected.name,
+            branchId,
+            branchName,
+            monthKey: mk,
+            nominal: manualPot,
+            createdAt: serverTimestamp(),
+            createdByUid: u.uid,
+            source: "MANUAL",
+            sourcePaymentGroupId: invoiceDraft.paymentGroupId,
+          });
         }
 
         for (let i = 0; i < invRefs.length; i++) {
           const { mk, invId, ref } = invRefs[i];
           const labelMk = invoiceDraft.monthLabels[i] || mk;
 
-          const pot = Math.max(
-            Number(invoiceDraft.potonganByMonth?.[mk] || 0),
-            0,
-          );
-
+          // ✅ FIX ERROR: nominal HARUS didefinisikan
           const nominal = Number(selected.spp || 0);
+
+          const spin =
+            discountMode === "MANUAL"
+              ? 0
+              : Math.max(Number(invoiceDraft.spinByMonth?.[mk] || 0), 0);
+
+          const manual =
+            discountMode === "SPIN"
+              ? 0
+              : Math.max(Number(manualDiscounts?.[mk] || 0), 0);
+
+          const pot = spin + manual;
           const total = Math.max(nominal - pot, 0);
 
           const payload: any = {
@@ -1922,6 +2019,50 @@ export default function BayarSPP() {
                   </View>
                 )}
 
+                {/* ================= PILIH CARA POTONGAN ================= */}
+                {invoiceDraft.status !== "PAID" && (
+                  <View style={{ marginTop: 12 }}>
+                    <Text style={styles.invSectionTitle}>Gunakan Potongan</Text>
+
+                    <View
+                      style={{ flexDirection: "row", gap: 8, marginTop: 8 }}
+                    >
+                      {(["SPIN", "MANUAL", "BOTH"] as const).map((opt) => {
+                        const active = discountMode === opt;
+
+                        return (
+                          <TouchableOpacity
+                            key={opt}
+                            activeOpacity={0.9}
+                            onPress={() => setDiscountMode(opt)}
+                            style={[
+                              styles.methodPill,
+                              active && styles.methodPillActive,
+                            ]}
+                          >
+                            <Text style={{ fontWeight: "900" }}>
+                              {opt === "SPIN"
+                                ? "Voucher Spin"
+                                : opt === "MANUAL"
+                                  ? "Manual"
+                                  : "Spin + Manual"}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    <Text style={[styles.note, { marginTop: 6 }]}>
+                      {discountMode === "SPIN" &&
+                        "Hanya potongan dari Spin yang digunakan"}
+                      {discountMode === "MANUAL" &&
+                        "Voucher Spin akan hangus jika tidak digunakan"}
+                      {discountMode === "BOTH" &&
+                        "Potongan Spin dan Manual akan digabung"}
+                    </Text>
+                  </View>
+                )}
+
                 {/* meta */}
                 <View style={styles.invSummaryCard}>
                   <InvoiceRow
@@ -2178,17 +2319,20 @@ export default function BayarSPP() {
                   {invoiceDraft.monthKeys.map((mk, idx) => {
                     const label = invoiceDraft.monthLabels[idx] || mk;
                     const nominal = Number(selected?.spp || 0);
-                    const pot = Math.max(
-                      Number(invoiceDraft.potonganByMonth?.[mk] || 0),
-                      0,
-                    );
+                    const spin =
+                      discountMode === "MANUAL"
+                        ? 0
+                        : Math.max(
+                            Number(invoiceDraft.spinByMonth?.[mk] || 0),
+                            0,
+                          );
 
-                    const spin = Math.max(
-                      Number(invoiceDraft.spinByMonth?.[mk] || 0),
-                      0,
-                    );
+                    const manual =
+                      discountMode === "SPIN"
+                        ? 0
+                        : Math.max(Number(manualDiscounts?.[mk] || 0), 0);
 
-                    const manual = Math.max(pot - spin, 0);
+                    const pot = spin + manual;
 
                     const subTotal = Math.max(nominal - pot, 0);
 
