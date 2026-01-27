@@ -1462,19 +1462,19 @@ export default function BayarSPP() {
           const mk = discRefs[i].mk;
           const spinRef = discRefs[i].ref;
 
-          if (discountMode === "SPIN" || discountMode === "BOTH") {
+          const voucherDipakai = Math.max(
+            Number(invoiceDraft.potonganByMonth?.[mk] || 0),
+            0,
+          );
+
+          if (
+            voucherDipakai > 0 &&
+            (discountMode === "SPIN" || discountMode === "BOTH")
+          ) {
             trx.update(spinRef, {
               status: "USED",
               usedAt: serverTimestamp(),
               usedByPaymentGroupId: invoiceDraft.paymentGroupId,
-            });
-          }
-
-          if (discountMode === "MANUAL") {
-            trx.update(spinRef, {
-              status: "EXPIRED",
-              expiredAt: serverTimestamp(),
-              expiredByPaymentGroupId: invoiceDraft.paymentGroupId,
             });
           }
         });
@@ -1514,7 +1514,10 @@ export default function BayarSPP() {
               ? 0
               : resolveSpinForPaidMonth(mk, invoiceDraft.spinByMonth);
 
-          const manual = 0; // manual sudah tergabung di pot
+          const manual =
+            discountMode === "SPIN"
+              ? 0
+              : Math.max(Number(manualDiscounts?.[mk] || 0), 0);
 
           const total = Math.max(nominal - pot, 0);
 
@@ -1522,7 +1525,10 @@ export default function BayarSPP() {
 
           // ✅ voucher spin hanya boleh dipakai jika ADA voucher di BULAN YANG DIBAYAR
           // 🔒 FIX: voucher spin TIDAK dipakai untuk bulan ini
-          const voucherSpin = 0;
+          const voucherSpin =
+            discountMode === "MANUAL"
+              ? 0
+              : Math.max(Number(discMap.get(mk) || 0), 0);
 
           // 🔥 voucher yang DIDAPAT untuk BULAN DEPAN
           const voucherSpinEarned = Object.entries(
@@ -1540,8 +1546,8 @@ export default function BayarSPP() {
               : Math.max(Number(manualDiscounts?.[mk] || 0), 0);
 
           // 🔒 FIX: total bayar hanya dikurangi voucher MANUAL
-          const totalVoucher = voucherManual;
-          const totalBayar = Math.max(nominalSebelumVoucher - voucherManual, 0);
+          const totalVoucher = voucherSpin + voucherManual;
+          const totalBayar = Math.max(nominalSebelumVoucher - totalVoucher, 0);
 
           const payload: any = {
             invoiceNo: invId,

@@ -299,16 +299,34 @@ export default function AdminRiwayatTab() {
           const voucherSpin = Number(data.voucherSpin || 0);
           let detailVoucherSpin = "-";
 
+          // 🔒 HANYA TAMPILKAN VOUCHER UNTUK BULAN SETELAH BULAN YANG DIBAYAR
+          const paidMonthKey =
+            typeof data.monthKey === "string"
+              ? data.monthKey
+              : typeof data.jenisPembayaran === "string"
+                ? data.jenisPembayaran.match(/\d{4}-\d{2}/)?.[0]
+                : null;
+
           if (
+            paidMonthKey &&
             Array.isArray(data.voucherSpinEarned) &&
             data.voucherSpinEarned.length > 0
           ) {
-            detailVoucherSpin = data.voucherSpinEarned
-              .map(
-                (v: any) =>
-                  `Untuk ${monthLabelFromKey(v.monthKey)}: ${Number(v.nominal).toLocaleString("id-ID")}`,
-              )
-              .join(", ");
+            const filtered = data.voucherSpinEarned.filter(
+              (v: any) => String(v.monthKey) > paidMonthKey,
+            );
+
+            detailVoucherSpin =
+              filtered.length > 0
+                ? filtered
+                    .map(
+                      (v: any) =>
+                        `Untuk ${monthLabelFromKey(v.monthKey)}: ${Number(v.nominal).toLocaleString("id-ID")}`,
+                    )
+                    .join(", ")
+                : "-";
+          } else {
+            detailVoucherSpin = "-";
           }
 
           const voucherManual = Number(data.voucherManual || 0);
