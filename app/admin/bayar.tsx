@@ -1365,7 +1365,8 @@ export default function BayarSPP() {
       mk: string;
       label: string;
       nominal: number;
-      spin: number;
+      spinUsed: number; // 🔴 dipakai bulan ini
+      spinEarned: number; // 🟢 didapat untuk bulan depan
       manual: number;
       total: number;
     }[] = [];
@@ -1597,11 +1598,17 @@ export default function BayarSPP() {
           trx.set(doc(db, "payments", invId), payload);
 
           // 🔥 SIMPAN UNTUK SPREADSHEET (JANGAN PUSH DI SINI)
+          // 🔥 voucher yang DIDAPAT untuk bulan DEPAN dari bulan ini
+          const spinEarned = Object.entries(invoiceDraft.spinByMonth || {})
+            .filter(([targetMk]) => targetMk === nextMonthKey(mk))
+            .reduce((sum, [, v]) => sum + Number(v || 0), 0);
+
           sheetRows.push({
             mk,
             label: labelMk,
             nominal,
-            spin,
+            spinUsed: spin, // potongan bulan ini
+            spinEarned, // voucher bulan depan
             manual,
             total,
           });
@@ -1648,14 +1655,15 @@ export default function BayarSPP() {
             metode: invoiceDraft.metode,
 
             nominalSebelumVoucher: row.nominal,
-            voucherSpin: row.spin,
+            voucherSpin: row.spinEarned,
             voucherManual: row.manual,
-            totalVoucher: row.spin + row.manual,
+            totalVoucher: row.spinUsed + row.manual,
+
             totalDibayar: row.total,
 
             voucherSpinDetail:
-              row.spin > 0
-                ? `Untuk ${monthLabelOf(new Date(nextMonthKey(row.mk) + "-01"))}: ${row.spin}`
+              row.spinEarned > 0
+                ? `Untuk ${monthLabelOf(new Date(nextMonthKey(row.mk) + "-01"))}: ${row.spinEarned}`
                 : "",
 
             monthKey: row.mk,
