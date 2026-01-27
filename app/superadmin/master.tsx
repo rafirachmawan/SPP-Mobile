@@ -44,14 +44,14 @@ export default function MasterMenu() {
   // ✅ Setting SPP dihapus dari Master (karena sudah disetting saat bikin siswa)
   const items = [
     {
-      title: "Tambah / Kelola Cabang",
-      desc: "Buat cabang baru & kelola data cabang.",
+      title: "Tambah / Kelola Unit",
+      desc: "Buat unit baru & kelola data unit.",
       icon: "business-outline",
       href: "/superadmin/cabang",
     },
     {
-      title: "Tambah / Kelola Admin Cabang",
-      desc: "Buat user admin untuk tiap cabang.",
+      title: "Tambah / Kelola Admin Unit",
+      desc: "Buat user admin untuk tiap unit.",
       icon: "people-outline",
       href: "/superadmin/admin-cabang",
     },
@@ -63,13 +63,13 @@ export default function MasterMenu() {
     },
     {
       title: "Tambah / Kelola Siswa",
-      desc: "Tambah siswa berdasarkan cabang & kelola daftar siswa.",
+      desc: "Tambah siswa berdasarkan unit & kelola daftar siswa.",
       icon: "person-add-outline",
       href: "/superadmin/tambah-siswa",
     },
     {
-      title: "Lihat Siswa per Cabang",
-      desc: "Cek daftar siswa berdasarkan cabang.",
+      title: "Lihat Siswa per Unit",
+      desc: "Cek daftar siswa berdasarkan unit.",
       icon: "school-outline",
       href: "/superadmin/siswa",
     },

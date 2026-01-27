@@ -1,38 +1,38 @@
 // FILE: app/superadmin/siswa.tsx
-import React, { useMemo, useState, useEffect } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Platform,
-  Alert,
   ActivityIndicator,
-  Modal,
+  Alert,
   Image,
+  Modal,
+  Platform,
   Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 
 // ✅ Firebase
-import { db } from "../../firebase"; // ✅ sesuaikan path
 import {
   collection,
+  limit,
   onSnapshot,
   orderBy,
   query,
-  where,
-  limit,
   Timestamp,
+  where,
 } from "firebase/firestore";
+import { db } from "../../firebase"; // ✅ sesuaikan path
 
 type Cabang = { id: string; nama: string };
 
@@ -163,8 +163,8 @@ export default function SiswaByCabangPage() {
       (err) => {
         console.log(err);
         setLoadingCabang(false);
-        Alert.alert("Gagal", "Tidak bisa mengambil data cabang.");
-      }
+        Alert.alert("Gagal", "Tidak bisa mengambil data unit.");
+      },
     );
 
     return () => unsub();
@@ -242,7 +242,7 @@ export default function SiswaByCabangPage() {
         console.log(err);
         setLoadingSiswa(false);
         Alert.alert("Gagal", "Tidak bisa mengambil data siswa.");
-      }
+      },
     );
 
     return () => unsub();
@@ -277,14 +277,14 @@ export default function SiswaByCabangPage() {
             baseCol,
             where("studentId", "==", selected.id),
             orderBy("paidAt", "desc"),
-            limit(60)
+            limit(60),
           )
         : query(
             baseCol,
             where("studentId", "==", selected.id),
             where("branchId", "==", cabang),
             orderBy("paidAt", "desc"),
-            limit(60)
+            limit(60),
           );
 
     const unsub = onSnapshot(
@@ -296,8 +296,8 @@ export default function SiswaByCabangPage() {
           const paidAt: Date | null = data?.paidAt?.toDate
             ? data.paidAt.toDate()
             : data?.paidAt instanceof Timestamp
-            ? data.paidAt.toDate()
-            : null;
+              ? data.paidAt.toDate()
+              : null;
 
           const monthKey = String(data.monthKey || "");
           const bulan =
@@ -305,8 +305,8 @@ export default function SiswaByCabangPage() {
             (monthKey
               ? monthLabelFromMonthKey(monthKey)
               : paidAt
-              ? bulanIndo(paidAt)
-              : "-");
+                ? bulanIndo(paidAt)
+                : "-");
 
           const nominal = Number(data.nominal || 0) || 0;
           const potongan = Number(data.potongan || 0) || 0;
@@ -337,7 +337,7 @@ export default function SiswaByCabangPage() {
       (err: any) => {
         console.log("mutasi superadmin error:", err?.code, err?.message);
         setLoadingHistory(false);
-      }
+      },
     );
 
     return () => unsub();
@@ -368,7 +368,7 @@ export default function SiswaByCabangPage() {
           style={[styles.modalSheet, { paddingBottom: insets.bottom + 12 }]}
         >
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Pilih Cabang</Text>
+            <Text style={styles.modalTitle}>Pilih Unit</Text>
             <TouchableOpacity
               activeOpacity={0.9}
               onPress={() => setCabangPickerOpen(false)}
@@ -383,7 +383,7 @@ export default function SiswaByCabangPage() {
             <TextInput
               value={cabangPickerSearch}
               onChangeText={setCabangPickerSearch}
-              placeholder="Cari cabang..."
+              placeholder="Cari unit..."
               placeholderTextColor="#94A3B8"
               style={styles.modalSearchInput}
               autoCorrect={false}
@@ -396,13 +396,13 @@ export default function SiswaByCabangPage() {
             keyboardShouldPersistTaps="handled"
           >
             {loadingCabang ? (
-              <Text style={styles.note}>Memuat cabang...</Text>
+              <Text style={styles.note}>Memuat unit...</Text>
             ) : cabangList.length <= 1 ? (
               <Text style={[styles.note, { color: "#ef4444" }]}>
-                Belum ada cabang. Tambah cabang dulu.
+                Belum ada unit. Tambah unit dulu.
               </Text>
             ) : cabangFiltered.length === 0 ? (
-              <Text style={styles.note}>Cabang tidak ditemukan.</Text>
+              <Text style={styles.note}>Unit tidak ditemukan.</Text>
             ) : (
               cabangFiltered.map((c) => {
                 const active = c.id === cabang;
@@ -454,7 +454,7 @@ export default function SiswaByCabangPage() {
           </ScrollView>
 
           <Text style={[styles.note, { marginTop: 10 }]}>
-            Tip: ketik nama cabang biar cepat.
+            Tip: ketik nama unit biar cepat.
           </Text>
         </View>
       </Modal>
@@ -471,21 +471,19 @@ export default function SiswaByCabangPage() {
         showsVerticalScrollIndicator={false}
       >
         <Header
-          title="Siswa per Cabang"
-          subtitle="Pilih cabang, lalu klik siswa untuk lihat mutasi."
+          title="Siswa per unit"
+          subtitle="Pilih unit, lalu klik siswa untuk lihat mutasi."
         />
 
         {/* Filter cabang */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Filter Cabang</Text>
+          <Text style={styles.cardTitle}>Filter Unit</Text>
 
           {loadingCabang ? (
-            <Text style={[styles.note, { marginTop: 10 }]}>
-              Memuat cabang...
-            </Text>
+            <Text style={[styles.note, { marginTop: 10 }]}>Memuat unit...</Text>
           ) : cabangList.length <= 1 ? (
             <Text style={[styles.note, { marginTop: 10 }]}>
-              Belum ada cabang. Tambah cabang dulu di fitur Tambah Cabang.
+              Belum ada unit. Tambah unit dulu di fitur Tambah Unit.
             </Text>
           ) : (
             <>
@@ -496,7 +494,7 @@ export default function SiswaByCabangPage() {
                 onPress={() => setCabangPickerOpen(true)}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.selectLabel}>Cabang Terpilih</Text>
+                  <Text style={styles.selectLabel}>Unit Terpilih</Text>
                   <Text style={styles.selectValue}>{cabangLabel}</Text>
                 </View>
                 <Ionicons name="chevron-down" size={18} color="#64748B" />

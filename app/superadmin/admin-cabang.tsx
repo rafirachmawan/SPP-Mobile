@@ -115,7 +115,7 @@ export default function AdminCabangPage() {
       },
       () => {
         setLoadingCabang(false);
-        Alert.alert("Gagal", "Tidak bisa mengambil data cabang.");
+        Alert.alert("Gagal", "Tidak bisa mengambil data unit.");
       },
     );
     return () => unsub();
@@ -146,7 +146,7 @@ export default function AdminCabangPage() {
       },
       () => {
         setLoadingAdmin(false);
-        Alert.alert("Gagal", "Tidak bisa mengambil data admin cabang.");
+        Alert.alert("Gagal", "Tidak bisa mengambil data admin unit.");
       },
     );
     return () => unsub();
@@ -238,7 +238,7 @@ export default function AdminCabangPage() {
 
       setShowForm(false);
       resetForm();
-      Alert.alert("Berhasil", "Admin cabang berhasil dibuat.");
+      Alert.alert("Berhasil", "Admin unit berhasil dibuat.");
     } catch (e: any) {
       Alert.alert("Gagal", e?.message || "Gagal membuat admin.");
     }
@@ -271,7 +271,7 @@ export default function AdminCabangPage() {
   // ===================== HAPUS ADMIN CABANG =====================
   async function onDeleteAdmin(item: AdminCabang) {
     Alert.alert(
-      "Hapus Admin Cabang",
+      "Hapus Admin Unit",
       `Admin "${item.nama}" akan DIHAPUS PERMANEN.`,
       [
         { text: "Batal", style: "cancel" },
@@ -285,7 +285,7 @@ export default function AdminCabangPage() {
               if (item.uid) {
                 await deleteDoc(doc(db, "users", item.uid));
               }
-              Alert.alert("Berhasil", "Admin cabang dihapus.");
+              Alert.alert("Berhasil", "Admin unit dihapus.");
             } catch (e: any) {
               Alert.alert("Gagal", e?.message || "Gagal menghapus admin.");
             }
@@ -347,7 +347,7 @@ export default function AdminCabangPage() {
             <TextInput
               value={cabangSearch}
               onChangeText={setCabangSearch}
-              placeholder="Cari cabang..."
+              placeholder="Cari unit..."
               placeholderTextColor="#94A3B8"
               style={styles.modalSearchInput}
               autoCorrect={false}
@@ -360,13 +360,13 @@ export default function AdminCabangPage() {
             keyboardShouldPersistTaps="handled"
           >
             {loadingCabang ? (
-              <Text style={styles.loadingText}>Memuat cabang...</Text>
+              <Text style={styles.loadingText}>Memuat unit...</Text>
             ) : cabang.length === 0 ? (
               <Text style={styles.warnText}>
-                Belum ada cabang. Tambah cabang dulu.
+                Belum ada unit. Tambah unit dulu.
               </Text>
             ) : cabangFiltered.length === 0 ? (
-              <Text style={styles.note}>Cabang tidak ditemukan.</Text>
+              <Text style={styles.note}>Unit tidak ditemukan.</Text>
             ) : (
               cabangFiltered.map((c) => {
                 const active = cabangId === c.id;
@@ -411,7 +411,7 @@ export default function AdminCabangPage() {
           </ScrollView>
 
           <Text style={[styles.note, { marginTop: 10 }]}>
-            Tip: cari nama cabang biar cepat.
+            Tip: cari nama unit biar cepat.
           </Text>
         </View>
       </Modal>
@@ -430,8 +430,8 @@ export default function AdminCabangPage() {
         showsVerticalScrollIndicator={false}
       >
         <Header
-          title="Admin Cabang"
-          subtitle="Tambah user admin untuk tiap cabang."
+          title="Admin Unit"
+          subtitle="Tambah user admin untuk tiap unit."
         />
 
         <View style={styles.card}>
@@ -461,7 +461,7 @@ export default function AdminCabangPage() {
               color="#fff"
             />
             <Text style={styles.primaryText}>
-              {showForm ? "Tutup Form" : "Tambah Admin Cabang"}
+              {showForm ? "Tutup Form" : "Tambah Admin unit"}
             </Text>
           </TouchableOpacity>
 
@@ -490,15 +490,13 @@ export default function AdminCabangPage() {
                 />
               </View>
 
-              <Text style={[styles.label, { marginTop: 12 }]}>
-                Pilih Cabang
-              </Text>
+              <Text style={[styles.label, { marginTop: 12 }]}>Pilih unit</Text>
 
               {loadingCabang ? (
-                <Text style={styles.loadingText}>Memuat cabang...</Text>
+                <Text style={styles.loadingText}>Memuat unit...</Text>
               ) : cabang.length === 0 ? (
                 <Text style={styles.warnText}>
-                  Belum ada cabang. Tambah cabang dulu.
+                  Belum ada unit. Tambah unit dulu.
                 </Text>
               ) : (
                 <>
@@ -509,7 +507,7 @@ export default function AdminCabangPage() {
                     onPress={() => setShowCabangPicker(true)}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.selectLabel}>Cabang Terpilih</Text>
+                      <Text style={styles.selectLabel}>Unit Terpilih</Text>
                       <Text style={styles.selectValue}>
                         {cabangName(cabangId)}
                       </Text>
@@ -518,7 +516,7 @@ export default function AdminCabangPage() {
                   </TouchableOpacity>
 
                   <Text style={styles.helper}>
-                    Klik untuk memilih cabang lain.
+                    Klik untuk memilih unit lain.
                   </Text>
                 </>
               )}
@@ -559,7 +557,7 @@ export default function AdminCabangPage() {
             {loadingAdmin ? (
               <Text style={styles.note}>Memuat data...</Text>
             ) : filtered.length === 0 ? (
-              <Text style={styles.note}>Belum ada admin cabang.</Text>
+              <Text style={styles.note}>Belum ada admin unit.</Text>
             ) : (
               filtered.map((a) => (
                 <View key={a.id} style={styles.item}>
@@ -627,8 +625,7 @@ export default function AdminCabangPage() {
           </View>
 
           <Text style={styles.note}>
-            * Admin dibuat oleh SUPERADMIN langsung dari app (tanpa Cloud
-            Function).
+            * Admin dibuat oleh SUPERADMIN langsung dari app
           </Text>
         </View>
 

@@ -73,7 +73,7 @@ export default function SuperadminDashboard() {
 
     const qAdmins = query(
       collection(db, "users"),
-      where("role", "==", "ADMIN_CABANG"),
+      where("role", "==", "ADMIN_UNIT"),
     );
     const unsubAdmins = onSnapshot(qAdmins, (snap) => {
       const count = snap.docs.filter(
@@ -127,9 +127,7 @@ export default function SuperadminDashboard() {
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Dashboard Superadmin</Text>
-            <Text style={styles.headerSub}>
-              Ringkasan global seluruh cabang
-            </Text>
+            <Text style={styles.headerSub}>Ringkasan global seluruh unit</Text>
           </View>
 
           <View style={styles.roleChip}>
@@ -156,16 +154,8 @@ export default function SuperadminDashboard() {
 
         {/* ================= KPI GRID ================= */}
         <View style={styles.kpiGrid}>
-          <KpiBox
-            label="Total Cabang"
-            value={summary.cabang}
-            loading={loading}
-          />
-          <KpiBox
-            label="Admin Cabang"
-            value={summary.admin}
-            loading={loading}
-          />
+          <KpiBox label="Total Unit" value={summary.cabang} loading={loading} />
+          <KpiBox label="Admin Unit" value={summary.admin} loading={loading} />
           <KpiBox label="Total Siswa" value={summary.siswa} loading={loading} />
           <KpiBox
             label="Bayar Bulan Ini"
@@ -181,12 +171,12 @@ export default function SuperadminDashboard() {
 
           <Action
             icon="business-outline"
-            label="Kelola Cabang"
+            label="Kelola Unit"
             onPress={() => router.push("/superadmin/cabang")}
           />
           <Action
             icon="people-outline"
-            label="Kelola Admin Cabang"
+            label="Kelola Admin Unit"
             onPress={() => router.push("/superadmin/admin-cabang")}
           />
           <Action
@@ -202,7 +192,7 @@ export default function SuperadminDashboard() {
           /> */}
           <Action
             icon="school-outline"
-            label="Siswa per Cabang"
+            label="Siswa per Unit"
             onPress={() => router.push("/superadmin/siswa")}
           />
           <Action
