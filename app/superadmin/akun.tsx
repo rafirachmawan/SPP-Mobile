@@ -64,28 +64,41 @@ export default function SuperadminAkun() {
   // =====================
   async function handleUpdateApp() {
     try {
-      const update = await Updates.checkForUpdateAsync();
-
-      if (update.isAvailable) {
+      if (!Updates.isEnabled) {
         Alert.alert(
-          "Update Tersedia",
-          "Versi terbaru aplikasi ditemukan. Update sekarang?",
-          [
-            { text: "Batal", style: "cancel" },
-            {
-              text: "Update",
-              onPress: async () => {
-                await Updates.fetchUpdateAsync();
-                Updates.reloadAsync();
-              },
-            },
-          ],
+          "Update Tidak Aktif",
+          "Aplikasi ini belum mendukung update otomatis.",
         );
-      } else {
-        Alert.alert("Info", "Aplikasi sudah versi terbaru.");
+        return;
       }
-    } catch (e) {
-      Alert.alert("Gagal Update", "Tidak bisa mengecek update saat ini.");
+
+      const result = await Updates.checkForUpdateAsync();
+
+      if (!result.isAvailable) {
+        Alert.alert("Info", "Aplikasi sudah versi terbaru.");
+        return;
+      }
+
+      Alert.alert(
+        "Update Tersedia",
+        "Versi terbaru aplikasi ditemukan. Update sekarang?",
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Update",
+            onPress: async () => {
+              await Updates.fetchUpdateAsync();
+              await Updates.reloadAsync();
+            },
+          },
+        ],
+      );
+    } catch (err) {
+      console.log("OTA ERROR:", err);
+      Alert.alert(
+        "Gagal Update",
+        "Update tidak tersedia untuk versi aplikasi ini.",
+      );
     }
   }
 

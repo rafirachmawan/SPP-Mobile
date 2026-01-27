@@ -126,7 +126,7 @@ export default function SuperadminDashboard() {
         {/* ================= HEADER ================= */}
         <View style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Dashboard Superadmin</Text>
+            <Text style={styles.headerTitle}>Dashboard Superadmin Tes OTA</Text>
             <Text style={styles.headerSub}>Ringkasan global seluruh unit</Text>
           </View>
 

@@ -8,17 +8,15 @@
     "scheme": "sppmobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "updates": {
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/41572db1-20da-4e8a-90bc-b0666d9c522a"
     },
-
     "ios": {
       "supportsTablet": true
     },
-
     "android": {
       "package": "com.rafirachmawan.sppmobile",
       "edgeToEdgeEnabled": true,
@@ -28,12 +26,10 @@
         "backgroundColor": "#FFFFFF"
       }
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -51,17 +47,18 @@
       "@react-native-community/datetimepicker",
       "expo-font"
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-
     "extra": {
       "router": {},
       "eas": {
         "projectId": "41572db1-20da-4e8a-90bc-b0666d9c522a"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
     }
   }
 }
