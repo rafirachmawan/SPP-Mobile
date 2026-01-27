@@ -1,5 +1,5 @@
 // FILE: app/superadmin/akun.tsx
-// ✅ FULL VERSION — Clean & Professional UI (LOGIC TETAP SAMA)
+// ✅ FULL VERSION — Clean & Professional UI (LOGIC TETAP SAMA + OTA UPDATE)
 
 import { Ionicons } from "@expo/vector-icons";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -19,6 +19,9 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+
+// ✅ OTA Update
+import * as Updates from "expo-updates";
 
 // 🎨 Font Map (Inter)
 const F = {
@@ -54,6 +57,36 @@ export default function SuperadminAkun() {
         onPress: () => router.replace("/login"),
       },
     ]);
+  }
+
+  // =====================
+  // ✅ OTA UPDATE HANDLER
+  // =====================
+  async function handleUpdateApp() {
+    try {
+      const update = await Updates.checkForUpdateAsync();
+
+      if (update.isAvailable) {
+        Alert.alert(
+          "Update Tersedia",
+          "Versi terbaru aplikasi ditemukan. Update sekarang?",
+          [
+            { text: "Batal", style: "cancel" },
+            {
+              text: "Update",
+              onPress: async () => {
+                await Updates.fetchUpdateAsync();
+                Updates.reloadAsync();
+              },
+            },
+          ],
+        );
+      } else {
+        Alert.alert("Info", "Aplikasi sudah versi terbaru.");
+      }
+    } catch (e) {
+      Alert.alert("Gagal Update", "Tidak bisa mengecek update saat ini.");
+    }
   }
 
   return (
@@ -119,6 +152,13 @@ export default function SuperadminAkun() {
         {/* ===== SETTINGS ===== */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Pengaturan</Text>
+
+          <ActionRow
+            icon="cloud-download-outline"
+            title="Update Aplikasi"
+            desc="Cek & update aplikasi ke versi terbaru."
+            onPress={handleUpdateApp}
+          />
 
           <ActionRow
             icon="key-outline"
