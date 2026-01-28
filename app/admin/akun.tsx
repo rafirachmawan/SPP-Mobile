@@ -23,6 +23,9 @@ import { signOut as signOutAuth } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
+// ✅ OTA Update
+import * as Updates from "expo-updates";
+
 // ✅ Inter font map
 const F = {
   regular: "Inter_400Regular",
@@ -147,6 +150,49 @@ export default function TabAkun() {
     ]);
   }
 
+  // =====================
+  // ✅ OTA UPDATE HANDLER
+  // =====================
+  async function handleUpdateApp() {
+    try {
+      if (!Updates.isEnabled) {
+        Alert.alert(
+          "Update Tidak Aktif",
+          "Aplikasi ini belum mendukung update otomatis.",
+        );
+        return;
+      }
+
+      const result = await Updates.checkForUpdateAsync();
+
+      if (!result.isAvailable) {
+        Alert.alert("Info", "Aplikasi sudah versi terbaru.");
+        return;
+      }
+
+      Alert.alert(
+        "Update Tersedia",
+        "Versi terbaru aplikasi ditemukan. Update sekarang?",
+        [
+          { text: "Batal", style: "cancel" },
+          {
+            text: "Update",
+            onPress: async () => {
+              await Updates.fetchUpdateAsync();
+              await Updates.reloadAsync();
+            },
+          },
+        ],
+      );
+    } catch (err) {
+      console.log("OTA ERROR:", err);
+      Alert.alert(
+        "Gagal Update",
+        "Update tidak tersedia untuk versi aplikasi ini.",
+      );
+    }
+  }
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
@@ -192,7 +238,6 @@ export default function TabAkun() {
 
               <View style={styles.divider} />
 
-              {/* ================= DETAIL ================= */}
               <DetailItem
                 icon="mail-outline"
                 label="Email Internal"
@@ -216,6 +261,34 @@ export default function TabAkun() {
             </>
           )}
         </View>
+
+        {/* ================= SETTINGS ================= */}
+        {!loading && profile && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Pengaturan</Text>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.actionRow}
+              onPress={handleUpdateApp}
+            >
+              <View style={styles.actionIcon}>
+                <Ionicons
+                  name="cloud-download-outline"
+                  size={18}
+                  color="#1E40AF"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.actionTitle}>Update Aplikasi</Text>
+                <Text style={styles.actionDesc}>
+                  Cek & update aplikasi ke versi terbaru
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ================= LOGOUT ================= */}
         {!loading && profile && (
@@ -338,6 +411,44 @@ const styles = StyleSheet.create({
     fontFamily: F.extrabold,
     fontSize: 13,
     color: "#0F172A",
+  },
+
+  sectionTitle: {
+    fontFamily: F.extrabold,
+    fontSize: 13,
+    color: "#0F172A",
+    marginBottom: 8,
+  },
+
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+  },
+
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 13,
+    backgroundColor: "rgba(219,234,254,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(191,219,254,1)",
+  },
+
+  actionTitle: {
+    fontFamily: F.extrabold,
+    fontSize: 13,
+    color: "#0F172A",
+  },
+
+  actionDesc: {
+    marginTop: 2,
+    fontFamily: F.bold,
+    fontSize: 12,
+    color: "#64748B",
   },
 
   dangerCard: {
