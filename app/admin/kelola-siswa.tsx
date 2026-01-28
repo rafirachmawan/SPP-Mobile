@@ -39,7 +39,12 @@ import {
 import { auth, db } from "../../firebase";
 
 /* ===================== TYPES (IDENTIK) ===================== */
-type StudentType = "Reguler" | "Beasiswa 0" | "Beasiswa 100" | "Pertemuan";
+type StudentType =
+  | "NONE"
+  | "Reguler"
+  | "Beasiswa 0"
+  | "Beasiswa 100"
+  | "Pertemuan";
 
 type Student = {
   id: string;
@@ -57,6 +62,14 @@ const TYPES: StudentType[] = [
   "Beasiswa 100",
   "Pertemuan",
 ];
+
+const DEFAULT_SPP: Record<StudentType, number> = {
+  NONE: 0,
+  Reguler: 200000,
+  "Beasiswa 0": 0,
+  "Beasiswa 100": 100000,
+  Pertemuan: 0,
+};
 
 /* ===================== UTIL ===================== */
 const F = {
@@ -85,7 +98,8 @@ export default function KelolaSiswaAdmin() {
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
-  const [type, setType] = useState<StudentType>("Reguler");
+  const [type, setType] = useState<StudentType>("NONE");
+
   const [sppDefault, setSppDefault] = useState("");
   const [pertemuan, setPertemuan] = useState("8");
   const [saving, setSaving] = useState(false);
@@ -146,20 +160,24 @@ export default function KelolaSiswaAdmin() {
     return () => unsub();
   }, [branchId]);
 
-  /* ===================== DEFAULT SPP ===================== */
-  useEffect(() => {
-    if (type === "Reguler") {
-      setSppDefault(rupiah(200000));
-    } else if (type === "Beasiswa 0") {
-      setSppDefault(rupiah(0));
-    } else if (type === "Beasiswa 100") {
-      setSppDefault(rupiah(100000));
+  function onChangeType(t: StudentType) {
+    setType(t);
+
+    // 🔒 set nominal otomatis & aman
+    setSppDefault(rupiah(DEFAULT_SPP[t]));
+
+    // default pertemuan
+    if (t === "Pertemuan") {
+      setPertemuan("8");
     }
-  }, [type]);
+  }
 
   /* ===================== ADD ===================== */
   async function onAdd() {
     if (!name.trim()) return Alert.alert("Nama wajib diisi");
+    if (type === "NONE") {
+      return Alert.alert("Tipe siswa wajib dipilih");
+    }
 
     try {
       setSaving(true);
@@ -168,7 +186,11 @@ export default function KelolaSiswaAdmin() {
         branchId,
         branchName,
         type,
-        sppDefault: toInt(sppDefault, 0),
+        sppDefault:
+          type === "Reguler"
+            ? DEFAULT_SPP.Reguler
+            : toInt(sppDefault, DEFAULT_SPP[type]),
+
         pertemuan: type === "Pertemuan" ? toInt(pertemuan, 8) : null,
         active: true,
         createdAt: serverTimestamp(),
@@ -177,8 +199,9 @@ export default function KelolaSiswaAdmin() {
 
       setShowForm(false);
       setName("");
-      setType("Reguler");
+      setType("NONE");
       setSppDefault("");
+
       setPertemuan("8");
     } catch (e: any) {
       Alert.alert("Gagal", e.message);
@@ -217,7 +240,7 @@ export default function KelolaSiswaAdmin() {
         contentContainerStyle={{
           padding: 18,
           paddingTop: insets.top + 18,
-          paddingBottom: tabH + 24,
+          paddingBottom: tabH + 60,
         }}
       >
         <Text style={styles.title}>Kelola Siswa</Text>
@@ -227,7 +250,15 @@ export default function KelolaSiswaAdmin() {
         <View style={styles.card}>
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => setShowForm(!showForm)}
+            onPress={() => {
+              if (!showForm) {
+                setName("");
+                setType("NONE");
+                setSppDefault("");
+                setPertemuan("8");
+              }
+              setShowForm(!showForm);
+            }}
           >
             <Ionicons
               name={showForm ? "close-outline" : "add-outline"}
@@ -239,8 +270,12 @@ export default function KelolaSiswaAdmin() {
             </Text>
           </TouchableOpacity>
 
+          <View style={{ height: 14 }} />
+
           {showForm && (
             <>
+              <Text style={styles.formHeader}>Data Siswa Baru</Text>
+
               <Text style={styles.formLabel}>Nama Siswa</Text>
               <TextInput
                 placeholder="Contoh: Ahmad Fauzi"
@@ -255,16 +290,42 @@ export default function KelolaSiswaAdmin() {
                 onPress={() => setTypePickerOpen(true)}
                 activeOpacity={0.8}
               >
-                <Text style={{ fontFamily: F.semibold }}>{type}</Text>
+                <Text
+                  style={{
+                    fontFamily: F.semibold,
+                    color: type === "NONE" ? "#94A3B8" : "#0F172A",
+                  }}
+                >
+                  {type === "NONE" ? "Pilih Tipe Siswa" : type}
+                </Text>
+
                 <Ionicons name="chevron-down" size={18} color="#64748B" />
               </TouchableOpacity>
 
+              <Text style={styles.formLabel}>Nominal SPP</Text>
+
               <TextInput
                 value={sppDefault}
+                editable={type === "Pertemuan"}
+                selectTextOnFocus={type === "Pertemuan"}
                 onChangeText={(t) => setSppDefault(formatRupiahInput(t))}
                 keyboardType="number-pad"
-                style={styles.input}
+                placeholder={
+                  type === "NONE"
+                    ? "Pilih tipe siswa terlebih dahulu"
+                    : undefined
+                }
+                style={[
+                  styles.input,
+                  type !== "Pertemuan" && styles.inputLocked,
+                ]}
               />
+
+              {type !== "Pertemuan" && (
+                <Text style={styles.helperText}>
+                  Nominal otomatis sesuai tipe siswa
+                </Text>
+              )}
 
               {type === "Pertemuan" && (
                 <TextInput
@@ -280,16 +341,29 @@ export default function KelolaSiswaAdmin() {
                 onPress={onAdd}
                 disabled={saving}
               >
+                <View style={{ height: 10 }} />
+
                 <Text style={styles.saveText}>
                   {saving ? "Menyimpan..." : "Simpan"}
                 </Text>
               </TouchableOpacity>
             </>
           )}
+          {showForm && <View style={{ height: 12 }} />}
         </View>
 
         {/* LIST */}
         <View style={styles.card}>
+          <Text style={styles.listHeader}>Daftar Siswa</Text>
+
+          <View
+            style={{
+              height: 1,
+              backgroundColor: "#E2E8F0",
+              marginBottom: 12,
+            }}
+          />
+
           <TextInput
             placeholder="Cari siswa..."
             value={q}
@@ -332,7 +406,7 @@ export default function KelolaSiswaAdmin() {
               key={t}
               style={styles.pickRow}
               onPress={() => {
-                setType(t);
+                onChangeType(t);
                 setTypePickerOpen(false);
               }}
             >
@@ -347,16 +421,41 @@ export default function KelolaSiswaAdmin() {
 
 /* ===================== STYLES ===================== */
 const styles = StyleSheet.create({
+  listHeader: {
+    fontSize: 14,
+    fontFamily: F.extrabold,
+    marginBottom: 10,
+  },
+
+  formHeader: {
+    fontSize: 14,
+    fontFamily: F.extrabold,
+    marginTop: 2, // ⬅️ TAMBAHAN
+    marginBottom: 10,
+  },
+
+  inputLocked: {
+    backgroundColor: "#F1F5F9",
+    color: "#475569",
+  },
+
+  helperText: {
+    marginTop: 6,
+    fontSize: 11,
+    color: "#64748B",
+  },
+
   title: { fontSize: 26, fontFamily: F.extrabold },
   subtitle: { color: "#64748B", marginBottom: 12 },
 
   card: {
     backgroundColor: "#fff",
     borderRadius: 18,
-    padding: 14,
+    padding: 16,
+    paddingBottom: 22, // ⬅️ TAMBAHAN PENTING
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    marginBottom: 14,
+    marginBottom: 22,
   },
 
   input: {
@@ -387,15 +486,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
   },
+
   primaryText: { color: "#fff", fontFamily: F.extrabold },
 
   saveBtn: {
     backgroundColor: "#16A34A",
-    marginTop: 14,
-    padding: 14,
+    marginTop: 18, // ⬅️ tambah jarak
+    paddingVertical: 14,
     borderRadius: 16,
     alignItems: "center",
   },
+
   saveText: { color: "#fff", fontFamily: F.extrabold },
 
   item: {

@@ -237,6 +237,13 @@ export default function AdminRiwayatTab() {
   );
   const [toDate, setToDate] = useState<Date>(today);
 
+  // =========================
+  // ✅ FILTER METODE PEMBAYARAN
+  // =========================
+  const [filterMetode, setFilterMetode] = useState<"ALL" | "Cash" | "Transfer">(
+    "ALL",
+  );
+
   const [showFrom, setShowFrom] = useState(false);
   const [showTo, setShowTo] = useState(false);
 
@@ -411,28 +418,35 @@ export default function AdminRiwayatTab() {
   }, [txs, appliedFrom, appliedTo]);
 
   // =========================
+  // ✅ FILTER METODE (Cash / Transfer / Semua)
+  // =========================
+  const filteredByMetode = useMemo<Tx[]>(() => {
+    if (filterMetode === "ALL") return filtered;
+    return filtered.filter((tx) => tx.metode === filterMetode);
+  }, [filtered, filterMetode]);
+
+  // =========================
   // ✅ HITUNG OMSET (BERDASARKAN TANGGAL BAYAR)
   // =========================
   const totalOmset = useMemo(() => {
-    return filtered.reduce((sum, tx) => {
-      // ❗ hanya uang masuk nyata
+    return filteredByMetode.reduce((sum, tx) => {
       if (tx.status === "Lunas") {
         return sum + (tx.totalBayar || 0);
       }
       return sum;
     }, 0);
-  }, [filtered]);
+  }, [filteredByMetode]);
 
   const grouped = useMemo(() => {
     const groups: { date: Date; items: Tx[] }[] = [];
-    for (const tx of filtered) {
+    for (const tx of filteredByMetode) {
       const day = atStartOfDay(tx.tanggal);
       const last = groups[groups.length - 1];
       if (last && isSameDay(last.date, day)) last.items.push(tx);
       else groups.push({ date: day, items: [tx] });
     }
     return groups;
-  }, [filtered]);
+  }, [filteredByMetode]);
 
   // =========================
   // ✅ PREVIEW BUKTI MODAL
@@ -574,16 +588,52 @@ export default function AdminRiwayatTab() {
 
         {/* LIST TRANSAKSI */}
         <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.cardTitle}>Daftar Transaksi</Text>
+          <View>
+            {/* HEADER + FILTER */}
+            <View style={styles.rowBetween}>
+              <Text style={styles.cardTitle}>Daftar Transaksi</Text>
 
-            <View style={{ alignItems: "flex-end", gap: 4 }}>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {(["ALL", "Cash", "Transfer"] as const).map((m) => {
+                  const active = filterMetode === m;
+                  return (
+                    <TouchableOpacity
+                      key={m}
+                      onPress={() => setFilterMetode(m)}
+                      style={[
+                        styles.badgeCount,
+                        active && {
+                          backgroundColor: "#E0F2FE",
+                          borderColor: "#7DD3FC",
+                        },
+                      ]}
+                    >
+                      <Text style={styles.badgeText}>
+                        {m === "ALL" ? "Semua" : m}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* INFO BARIS KEDUA */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: 10,
+              }}
+            >
               <View style={styles.badgeCount}>
-                <Text style={styles.badgeText}>{filtered.length} trx</Text>
+                <Text style={styles.badgeText}>
+                  {filteredByMetode.length} trx
+                </Text>
               </View>
 
               <Text
-                style={{ fontWeight: "900", color: "#0F172A", fontSize: 13 }}
+                style={{ fontWeight: "900", color: "#0F172A", fontSize: 14 }}
               >
                 Omset: Rp {totalOmset.toLocaleString("id-ID")}
               </Text>
