@@ -748,6 +748,18 @@ export default function BayarSPP() {
     );
   }
 
+  function hasUnspunEligibleSpin(
+    invoiceDraft: InvoiceDraft | null,
+    paidMonths: Record<string, { paid: boolean }>,
+  ) {
+    if (!invoiceDraft) return false;
+
+    const eligible = getEligibleSpinMonths(invoiceDraft.monthKeys, paidMonths);
+
+    // masih ada eligible tapi belum di-spin
+    return eligible.some((mk) => invoiceDraft.spinByMonth?.[mk] == null);
+  }
+
   async function ensurePerms() {
     const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (lib.status !== "granted") {
@@ -1187,6 +1199,14 @@ export default function BayarSPP() {
 
   // ===================== SPIN STEP-BY-STEP (FIX: auto hitung pending tanpa queue/cursor) =====================
   async function spinNext(): Promise<SpinResult | null> {
+    if (discountMode === "MANUAL") {
+      Alert.alert(
+        "Mode Manual Aktif",
+        "Spin dinonaktifkan. Gunakan potongan manual saja.",
+      );
+      return null;
+    }
+
     try {
       if (!selected || !invoiceDraft || !branchId) return null;
 
@@ -1360,6 +1380,21 @@ export default function BayarSPP() {
 
   // ===================== PAY =====================
   async function confirmPay() {
+    // 🚨 CEK: masih ada spin eligible tapi belum dilakukan
+    if (
+      invoiceDraft &&
+      (discountMode === "SPIN" || discountMode === "BOTH") &&
+      hasUnspunEligibleSpin(invoiceDraft, paidMonths)
+    ) {
+      Alert.alert(
+        "⚠️ Voucher Spin Belum Digunakan",
+        "Masih ada voucher Spin yang belum dilakukan.\n\n" +
+          "Jika kamu lanjut bayar sekarang, siswa TIDAK akan mendapatkan voucher Spin untuk bulan berikutnya.\n\n" +
+          "Silakan lakukan Spin terlebih dahulu.",
+      );
+      return; // ⛔ STOP BAYAR
+    }
+
     // 🔥 PENAMPUNG DATA UNTUK SPREADSHEET (DIISI SAAT TRANSACTION)
     const sheetRows: {
       mk: string;
@@ -2161,6 +2196,35 @@ export default function BayarSPP() {
                   </View>
                 )}
 
+                {invoiceDraft.status !== "PAID" &&
+                  discountMode === "SPIN" &&
+                  hasUnspunEligibleSpin(invoiceDraft, paidMonths) && (
+                    <View
+                      style={{
+                        marginTop: 10,
+                        padding: 10,
+                        borderRadius: 14,
+                        backgroundColor: "#FEF3C7",
+                        borderWidth: 1,
+                        borderColor: "#FCD34D",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          fontWeight: "800",
+                          color: "#92400E",
+                          lineHeight: 18,
+                        }}
+                      >
+                        ⚠️ Ada voucher Spin yang BELUM dilakukan.
+                        {"\n"}
+                        Jika langsung bayar, siswa tidak akan mendapatkan
+                        voucher Spin bulan berikutnya.
+                      </Text>
+                    </View>
+                  )}
+
                 {/* ================= PILIH CARA POTONGAN ================= */}
                 {invoiceDraft.status !== "PAID" && (
                   <View style={{ marginTop: 12 }}>
@@ -2269,6 +2333,7 @@ export default function BayarSPP() {
                             const stepMax = eligible.length;
 
                             const spinLocked =
+                              discountMode === "MANUAL" || // 🔒 KUNCI TOTAL
                               spinLoading ||
                               eligible.length === 0 ||
                               pending.length === 0;
@@ -2277,24 +2342,37 @@ export default function BayarSPP() {
                               <>
                                 <View style={styles.spinInfoBox}>
                                   <Text style={styles.spinInfoText}>
-                                    Status:{" "}
-                                    <Text style={{ fontWeight: "900" }}>
-                                      {eligible.length === 0
-                                        ? "TIDAK TERSEDIA"
-                                        : pending.length === 0
-                                          ? "SELESAI"
-                                          : "TERBUKA"}
-                                    </Text>
-                                    {"\n"}
-                                    Eligible Spin:{" "}
-                                    <Text style={{ fontWeight: "900" }}>
-                                      {eligible.length}x
-                                    </Text>
-                                    {"\n"}
-                                    Total Hadiah Spin:{" "}
-                                    <Text style={{ fontWeight: "900" }}>
-                                      {rupiah(lastSpinAwardTotal)}
-                                    </Text>
+                                    {discountMode === "MANUAL" ? (
+                                      <>
+                                        Status:{" "}
+                                        <Text style={{ fontWeight: "900" }}>
+                                          DINONAKTIFKAN
+                                        </Text>
+                                        {"\n"}
+                                        Mode Manual aktif — Spin tidak tersedia
+                                      </>
+                                    ) : (
+                                      <>
+                                        Status:{" "}
+                                        <Text style={{ fontWeight: "900" }}>
+                                          {eligible.length === 0
+                                            ? "TIDAK TERSEDIA"
+                                            : pending.length === 0
+                                              ? "SELESAI"
+                                              : "TERBUKA"}
+                                        </Text>
+                                        {"\n"}
+                                        Eligible Spin:{" "}
+                                        <Text style={{ fontWeight: "900" }}>
+                                          {eligible.length}x
+                                        </Text>
+                                        {"\n"}
+                                        Total Hadiah Spin:{" "}
+                                        <Text style={{ fontWeight: "900" }}>
+                                          {rupiah(lastSpinAwardTotal)}
+                                        </Text>
+                                      </>
+                                    )}
                                   </Text>
                                 </View>
 
