@@ -72,10 +72,12 @@ function getMonthKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const MASTER_ID = "__ALL__";
+
 export default function SpinSettingPage() {
   const insets = useSafeAreaInsets();
   const tabH = useBottomTabBarHeight();
-  const [branchId, setBranchId] = useState<string>("");
+  const [branchId, setBranchId] = useState<string>(MASTER_ID);
 
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
 
@@ -130,6 +132,8 @@ export default function SpinSettingPage() {
     [items],
   );
 
+  const isMaster = branchId === MASTER_ID;
+
   // ===================== AMBIL branchId ADMIN =====================
   useEffect(() => {
     (async () => {
@@ -176,6 +180,35 @@ export default function SpinSettingPage() {
     (async () => {
       try {
         if (!branchId) return;
+
+        // ===================== MODE MASTER =====================
+        if (branchId === MASTER_ID) {
+          const globalSnap = await getDoc(doc(db, "spin_settings", "global"));
+
+          if (!globalSnap.exists()) {
+            setItems([]);
+            setLoading(false);
+            return;
+          }
+
+          const g = globalSnap.data() as any;
+
+          setSebelumTanggal(String(g.sebelumTanggal ?? "11"));
+          setDipakaiBulanDepan(g.dipakaiBulanDepan !== false);
+
+          setItems(
+            (g.hadiahTemplate || []).map((h: any) => ({
+              id: h.id,
+              label: h.label,
+              nominal: h.nominal,
+              peluang: h.peluang,
+              kuota: h.kuotaAwal ?? 0, // tampilkan kuota awal saja
+            })),
+          );
+
+          setLoading(false);
+          return;
+        }
 
         setLoading(true);
 
@@ -225,10 +258,13 @@ export default function SpinSettingPage() {
 
         // 🔁 reset bulanan (jika perlu)
         if (kd.lastResetMonth !== nowMonth) {
-          kd.kuota.forEach((k: any) => {
-            kuotaMap[k.id] = {
-              kuota: k.kuotaAwal,
-              kuotaAwal: k.kuotaAwal,
+          const globalSnap = await getDoc(doc(db, "spin_settings", "global"));
+          const template = globalSnap.data()?.hadiahTemplate || [];
+
+          template.forEach((h: any) => {
+            kuotaMap[h.id] = {
+              kuota: h.kuotaAwal ?? 0,
+              kuotaAwal: h.kuotaAwal ?? 0,
             };
           });
 
@@ -364,7 +400,51 @@ export default function SpinSettingPage() {
         return;
       }
 
-      setSaving(true);
+      // ===================== MASTER SAVE =====================
+      if (branchId === MASTER_ID) {
+        // 1️⃣ simpan template global
+        await setDoc(
+          doc(db, "spin_settings", "global"),
+          {
+            sebelumTanggal: tgl,
+            dipakaiBulanDepan,
+            hadiahTemplate: items.map(({ kuota, ...h }) => ({
+              ...h,
+              kuotaAwal: Number(kuota ?? 0),
+            })),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true },
+        );
+
+        // 2️⃣ SEED ke semua unit
+        const branchesSnap = await getDocs(collection(db, "branches"));
+
+        for (const b of branchesSnap.docs) {
+          const bid = b.id;
+
+          await setDoc(
+            doc(db, "spin_kuota", bid),
+            {
+              kuota: items.map((h) => ({
+                id: h.id,
+                kuota: Number(h.kuota ?? 0),
+                kuotaAwal: Number(h.kuota ?? 0),
+              })),
+              lastResetMonth: getMonthKey(),
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true },
+          );
+        }
+
+        Alert.alert(
+          "Berhasil",
+          "Master kuota berhasil diterapkan ke semua unit.",
+        );
+        setSaving(false);
+        return;
+      }
 
       // ===================== 🅰️ SIMPAN HADIAH GLOBAL =====================
       await setDoc(
@@ -471,8 +551,11 @@ export default function SpinSettingPage() {
             onPress={() => setShowUnitDropdown((v) => !v)}
           >
             <Text style={styles.unitDropdownText}>
-              {branches.find((b) => b.id === branchId)?.name || "Pilih Unit"}
+              {branchId === MASTER_ID
+                ? "Semua Unit (Master)"
+                : branches.find((b) => b.id === branchId)?.name || "Pilih Unit"}
             </Text>
+
             <Ionicons
               name={showUnitDropdown ? "chevron-up" : "chevron-down"}
               size={18}
@@ -482,7 +565,10 @@ export default function SpinSettingPage() {
 
           {/* Dropdown list */}
           {showUnitDropdown &&
-            branches.map((b) => (
+            [
+              { id: MASTER_ID, name: "Semua Unit (Master Kuota Bulanan)" },
+              ...branches,
+            ].map((b) => (
               <TouchableOpacity
                 key={b.id}
                 style={[
@@ -566,7 +652,8 @@ export default function SpinSettingPage() {
 
               <TouchableOpacity
                 activeOpacity={0.9}
-                style={styles.primaryBtn}
+                disabled={!isMaster}
+                style={[styles.primaryBtn, !isMaster && { opacity: 0.5 }]}
                 onPress={() => setShowForm((v) => !v)}
               >
                 <Ionicons
@@ -668,6 +755,7 @@ export default function SpinSettingPage() {
                         <Text style={styles.inlineLabel}>Ubah kuota</Text>
                         <View style={styles.inlineInputWrap}>
                           <TextInput
+                            editable={isMaster}
                             value={String(h.kuota ?? 0)}
                             onChangeText={(v) => updateKuota(h.id, v)}
                             placeholder="0"
