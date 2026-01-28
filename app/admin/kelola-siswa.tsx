@@ -34,8 +34,10 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
+
 import { auth, db } from "../../firebase";
 
 /* ===================== TYPES (IDENTIK) ===================== */
@@ -107,6 +109,15 @@ export default function KelolaSiswaAdmin() {
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [typePickerSearch, setTypePickerSearch] = useState("");
 
+  // ===================== EDIT STATE (ADMIN) =====================
+  const [editOpen, setEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState<Student | null>(null);
+
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState<StudentType>("NONE");
+  const [editSpp, setEditSpp] = useState("");
+  const [editPertemuan, setEditPertemuan] = useState("8");
+
   /* ===================== LOAD CABANG (FINAL) ===================== */
   useEffect(() => {
     (async () => {
@@ -172,6 +183,17 @@ export default function KelolaSiswaAdmin() {
     }
   }
 
+  function onChangeEditType(t: StudentType) {
+    setEditType(t);
+
+    // set nominal otomatis
+    setEditSpp(rupiah(DEFAULT_SPP[t]));
+
+    if (t === "Pertemuan") {
+      setEditPertemuan("8");
+    }
+  }
+
   /* ===================== ADD ===================== */
   async function onAdd() {
     if (!name.trim()) return Alert.alert("Nama wajib diisi");
@@ -220,6 +242,53 @@ export default function KelolaSiswaAdmin() {
         onPress: () => deleteDoc(doc(db, "students", s.id)),
       },
     ]);
+  }
+  /* ===================== EDIT ===================== */
+  function openEdit(s: Student) {
+    setEditItem(s);
+    setEditName(s.name);
+    setEditType(s.type);
+    setEditSpp(rupiah(s.sppDefault));
+    setEditPertemuan(String(s.pertemuan ?? 8));
+    setEditOpen(true);
+  }
+
+  async function saveEdit() {
+    if (!editItem) return;
+    if (!editName.trim()) return Alert.alert("Nama wajib diisi");
+    if (editType === "NONE") return Alert.alert("Tipe wajib dipilih");
+
+    try {
+      await updateDoc(doc(db, "students", editItem.id), {
+        name: editName.trim(),
+        type: editType,
+        sppDefault:
+          editType === "Reguler"
+            ? DEFAULT_SPP.Reguler
+            : toInt(editSpp, DEFAULT_SPP[editType]),
+        pertemuan: editType === "Pertemuan" ? toInt(editPertemuan, 8) : null,
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.uid,
+      });
+
+      setEditOpen(false);
+      setEditItem(null);
+    } catch (e: any) {
+      Alert.alert("Gagal", e.message);
+    }
+  }
+
+  /* ===================== TOGGLE ACTIVE ===================== */
+  async function onToggleActive(s: Student) {
+    try {
+      await updateDoc(doc(db, "students", s.id), {
+        active: !s.active,
+        updatedAt: serverTimestamp(),
+        updatedBy: auth.currentUser?.uid,
+      });
+    } catch (e: any) {
+      Alert.alert("Gagal", e.message);
+    }
   }
 
   const filtered = useMemo(
@@ -379,15 +448,50 @@ export default function KelolaSiswaAdmin() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.itemTitle}>{s.name}</Text>
                   <Text style={styles.itemSub}>
-                    {s.type} • {rupiah(s.sppDefault)}
+                    {s.type}
+                    {s.type === "Pertemuan" && s.pertemuan
+                      ? ` (${s.pertemuan}x)`
+                      : ""}{" "}
+                    • {rupiah(s.sppDefault)}
+                  </Text>
+
+                  <Text style={{ fontSize: 11, marginTop: 4 }}>
+                    Status: {s.active ? "Aktif" : "Nonaktif"}
                   </Text>
                 </View>
-                <TouchableOpacity
-                  style={styles.trash}
-                  onPress={() => onDelete(s)}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#fff" />
-                </TouchableOpacity>
+
+                <View style={{ gap: 8 }}>
+                  {/* EDIT */}
+                  <TouchableOpacity
+                    style={styles.smallBtn}
+                    onPress={() => openEdit(s)}
+                  >
+                    <Ionicons name="create-outline" size={18} color="#0F172A" />
+                  </TouchableOpacity>
+
+                  {/* AKTIF / NONAKTIF */}
+                  <TouchableOpacity
+                    style={[
+                      styles.smallBtn,
+                      s.active ? styles.smallWarn : styles.smallOk,
+                    ]}
+                    onPress={() => onToggleActive(s)}
+                  >
+                    <Ionicons
+                      name={s.active ? "pause-outline" : "play-outline"}
+                      size={18}
+                      color="#fff"
+                    />
+                  </TouchableOpacity>
+
+                  {/* DELETE */}
+                  <TouchableOpacity
+                    style={[styles.smallBtn, styles.smallDanger]}
+                    onPress={() => onDelete(s)}
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#fff" />
+                  </TouchableOpacity>
+                </View>
               </View>
             ))
           )}
@@ -401,18 +505,79 @@ export default function KelolaSiswaAdmin() {
           onPress={() => setTypePickerOpen(false)}
         />
         <View style={styles.modal}>
-          {TYPES.map((t) => (
+          {TYPES.map((t) => {
+            const current = editOpen ? editType : type;
+            const active = t === current;
+
+            return (
+              <TouchableOpacity
+                key={t}
+                style={[
+                  styles.pickRow,
+                  active && { backgroundColor: "#E0F2FE" },
+                ]}
+                onPress={() => {
+                  if (editOpen) {
+                    onChangeEditType(t); // 🟧 EDIT
+                  } else {
+                    onChangeType(t); // 🟦 ADD
+                  }
+                  setTypePickerOpen(false);
+                }}
+              >
+                <Text style={{ fontFamily: F.semibold }}>{t}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Modal>
+      {/* ===================== EDIT MODAL ===================== */}
+      <Modal visible={editOpen} transparent animationType="fade">
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <Text style={styles.formHeader}>Edit Siswa</Text>
+
+            <Text style={styles.formLabel}>Nama</Text>
+            <TextInput
+              value={editName}
+              onChangeText={setEditName}
+              style={styles.input}
+            />
+
+            <Text style={styles.formLabel}>Tipe</Text>
             <TouchableOpacity
-              key={t}
-              style={styles.pickRow}
-              onPress={() => {
-                onChangeType(t);
-                setTypePickerOpen(false);
-              }}
+              style={styles.select}
+              onPress={() => setTypePickerOpen(true)}
             >
-              <Text>{t}</Text>
+              <Text>{editType === "NONE" ? "Pilih Tipe" : editType}</Text>
+              <Ionicons name="chevron-down" size={18} />
             </TouchableOpacity>
-          ))}
+
+            <Text style={styles.formLabel}>Nominal SPP</Text>
+            <TextInput
+              value={editSpp}
+              editable={editType === "Pertemuan"}
+              onChangeText={(t) => setEditSpp(formatRupiahInput(t))}
+              keyboardType="number-pad"
+              style={[
+                styles.input,
+                editType !== "Pertemuan" && styles.inputLocked,
+              ]}
+            />
+
+            {editType === "Pertemuan" && (
+              <TextInput
+                value={editPertemuan}
+                onChangeText={setEditPertemuan}
+                keyboardType="number-pad"
+                style={styles.input}
+              />
+            )}
+
+            <TouchableOpacity style={styles.saveBtn} onPress={saveEdit}>
+              <Text style={styles.saveText}>Simpan Perubahan</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -421,6 +586,18 @@ export default function KelolaSiswaAdmin() {
 
 /* ===================== STYLES ===================== */
 const styles = StyleSheet.create({
+  smallBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#E5E7EB",
+  },
+  smallOk: { backgroundColor: "#16A34A" },
+  smallWarn: { backgroundColor: "#F97316" },
+  smallDanger: { backgroundColor: "#EF4444" },
+
   listHeader: {
     fontSize: 14,
     fontFamily: F.extrabold,
