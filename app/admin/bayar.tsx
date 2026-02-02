@@ -713,7 +713,8 @@ export default function BayarSPP() {
       new Date(now.getFullYear(), now.getMonth(), 1),
     );
 
-    return paidMonthKey > currentKey;
+    // ✅ FIX: bulan sekarang DIIZINKAN
+    return paidMonthKey >= currentKey;
   }
 
   /**
