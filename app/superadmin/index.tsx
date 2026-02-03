@@ -1,5 +1,5 @@
 // FILE: app/superadmin/index.tsx
-// ✅ CLEAN & PROFESSIONAL UI — LOGIC TIDAK DIUBAH
+// ✅ CLEAN & PROFESSIONAL UI — LOGIC DIPERBAIKI (ADMIN UNIT)
 
 import { Ionicons } from "@expo/vector-icons";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -21,7 +21,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
-// ✅ Firebase (ASLI — TIDAK DIUBAH)
+// ✅ Firebase
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../../firebase";
 
@@ -36,7 +36,7 @@ const F = {
   extrabold: "Inter_800ExtraBold",
 };
 
-// ================= UTIL (ASLI) =================
+// ================= UTIL =================
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -54,7 +54,7 @@ export default function SuperadminDashboard() {
 
   const mkNow = useMemo(() => monthKeyOf(new Date()), []);
 
-  // ================= STATE (ASLI) =================
+  // ================= STATE =================
   const [summary, setSummary] = useState({
     cabang: 0,
     admin: 0,
@@ -63,29 +63,31 @@ export default function SuperadminDashboard() {
   });
   const [loading, setLoading] = useState(true);
 
-  // ================= REALTIME EFFECT (ASLI) =================
+  // ================= REALTIME EFFECT =================
   useEffect(() => {
     setLoading(true);
 
+    // ✅ TOTAL UNIT
     const unsubBranches = onSnapshot(collection(db, "branches"), (snap) => {
       setSummary((p) => ({ ...p, cabang: snap.size }));
     });
 
-    const qAdmins = query(
-      collection(db, "users"),
-      where("role", "==", "ADMIN_UNIT"),
-    );
+    // ✅ ADMIN UNIT (FIX: AMBIL DARI branch_admins)
+    const qAdmins = query(collection(db, "branch_admins"));
     const unsubAdmins = onSnapshot(qAdmins, (snap) => {
       const count = snap.docs.filter(
-        (d) => (d.data() as any)?.active !== false,
+        (d) => (d.data() as any)?.aktif !== false,
       ).length;
+
       setSummary((p) => ({ ...p, admin: count }));
     });
 
+    // ✅ TOTAL SISWA
     const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
       setSummary((p) => ({ ...p, siswa: snap.size }));
     });
 
+    // ✅ PEMBAYARAN BULAN INI
     const qInvoices = query(
       collection(db, "invoices"),
       where("monthKey", "==", mkNow),
@@ -184,12 +186,6 @@ export default function SuperadminDashboard() {
             label="Setting Hadiah Spin"
             onPress={() => router.push("/superadmin/spin")}
           />
-
-          {/* <Action
-            icon="settings-outline"
-            label="Setting SPP"
-            onPress={() => router.push("/superadmin/setting-spp")}
-          /> */}
           <Action
             icon="school-outline"
             label="Siswa per Unit"
