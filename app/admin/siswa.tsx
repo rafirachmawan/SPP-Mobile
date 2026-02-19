@@ -138,6 +138,15 @@ export default function TabSiswa() {
   const [history, setHistory] = useState<PaidRow[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // ✅ siswa yang belum bayar bulan ini
+  const [belumBayar, setBelumBayar] = useState<Student[]>([]);
+
+  // ✅ siswa yang sudah bayar bulan ini
+  const [sudahBayar, setSudahBayar] = useState<Student[]>([]);
+
+  // ✅ filter tab
+  const [filterMode, setFilterMode] = useState<"terbayar" | "belum">("belum");
+
   // ✅ modal preview bukti
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<PaidRow | null>(null);
@@ -341,6 +350,44 @@ export default function TabSiswa() {
     return () => unsub();
   }, [branchId, selected?.id]);
 
+  // ===================== Hitung siapa yang belum bayar bulan ini =====================
+  useEffect(() => {
+    if (!branchId || siswa.length === 0) {
+      setBelumBayar([]);
+      setSudahBayar([]);
+      return;
+    }
+
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+
+    const qPay = query(
+      collection(db, "payments"),
+      where("branchId", "==", branchId),
+      where("monthKey", "==", currentMonthKey),
+    );
+
+    const unsub = onSnapshot(qPay, (snap) => {
+      const paidIds = new Set<string>();
+
+      snap.docs.forEach((d) => {
+        const data = d.data() as any;
+        if (data.studentId) {
+          paidIds.add(String(data.studentId));
+        }
+      });
+
+      const sudah = siswa.filter((s) => paidIds.has(s.id));
+
+      const belum = siswa.filter((s) => !paidIds.has(s.id));
+
+      setSudahBayar(sudah);
+      setBelumBayar(belum);
+    });
+
+    return () => unsub();
+  }, [branchId, siswa]);
+
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     if (!qq) return siswa;
@@ -405,6 +452,42 @@ export default function TabSiswa() {
                 <Ionicons name="search-outline" size={18} color="#64748B" />
               </View>
             </View>
+            {/* ===== TAB TERBAYAR / BELUM ===== */}
+            <View style={styles.segmentWrap}>
+              <TouchableOpacity
+                onPress={() => setFilterMode("terbayar")}
+                style={[
+                  styles.segmentBtn,
+                  filterMode === "terbayar" && styles.segmentActiveBlue,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    filterMode === "terbayar" && styles.segmentTextActive,
+                  ]}
+                >
+                  Terbayar ({sudahBayar.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setFilterMode("belum")}
+                style={[
+                  styles.segmentBtn,
+                  filterMode === "belum" && styles.segmentActiveRed,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    filterMode === "belum" && styles.segmentTextActive,
+                  ]}
+                >
+                  Belum ({belumBayar.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <View style={{ marginTop: 12, gap: 10 }}>
               {loadingSiswa ? (
@@ -414,30 +497,41 @@ export default function TabSiswa() {
                     Memuat siswa...
                   </Text>
                 </View>
-              ) : filtered.length === 0 ? (
-                <Text style={styles.empty}>Tidak ada siswa di cabang ini.</Text>
               ) : (
-                filtered.slice(0, 50).map((s) => (
-                  <TouchableOpacity
-                    key={s.id}
-                    activeOpacity={0.9}
-                    onPress={() => setSelected(s)}
-                    style={styles.studentItem}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.studentName}>{s.name}</Text>
-                      <Text style={styles.studentSub}>
-                        {s.tipe} • Rp {s.sppDefault.toLocaleString("id-ID")}
-                      </Text>
-                    </View>
+                (() => {
+                  const dataToShow =
+                    filterMode === "terbayar" ? sudahBayar : belumBayar;
 
-                    <Ionicons
-                      name="chevron-forward"
-                      size={22}
-                      color="#94A3B8"
-                    />
-                  </TouchableOpacity>
-                ))
+                  if (dataToShow.length === 0) {
+                    return (
+                      <Text style={styles.empty}>
+                        Tidak ada data untuk kategori ini.
+                      </Text>
+                    );
+                  }
+
+                  return dataToShow.slice(0, 50).map((s) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      activeOpacity={0.9}
+                      onPress={() => setSelected(s)}
+                      style={styles.studentItem}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.studentName}>{s.name}</Text>
+                        <Text style={styles.studentSub}>
+                          {s.tipe} • Rp {s.sppDefault.toLocaleString("id-ID")}
+                        </Text>
+                      </View>
+
+                      <Ionicons
+                        name="chevron-forward"
+                        size={22}
+                        color="#94A3B8"
+                      />
+                    </TouchableOpacity>
+                  ));
+                })()
               )}
             </View>
 
@@ -925,5 +1019,36 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     padding: 10,
   },
+  segmentWrap: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+  },
+
+  segmentActiveBlue: {
+    backgroundColor: "#DBEAFE",
+  },
+
+  segmentActiveRed: {
+    backgroundColor: "#FEE2E2",
+  },
+
+  segmentText: {
+    fontWeight: "800",
+    color: "#475569",
+  },
+
+  segmentTextActive: {
+    color: "#0F172A",
+  },
+
   previewMetaText: { color: "#0F172A", fontWeight: "700", lineHeight: 18 },
 });
