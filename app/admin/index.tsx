@@ -127,7 +127,9 @@ export default function AdminDashboard() {
     const qRef = query(
       collection(db, "students"),
       where("branchId", "==", branchId),
+      where("active", "==", true), // 🔥 TAMBAHAN
     );
+
     const unsub = onSnapshot(qRef, (snap) => setTotalSiswa(snap.size));
     return () => unsub();
   }, [branchId]);

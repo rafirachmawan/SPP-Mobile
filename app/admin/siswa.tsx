@@ -41,6 +41,7 @@ type Student = {
   name: string;
   tipe: "Normal" | "Beasiswa 0" | "Beasiswa 100" | "Pertemuan (8x)";
   sppDefault: number;
+  active: boolean; // ⬅️ TAMBAH INI
 };
 
 type PaidRow = {
@@ -238,6 +239,7 @@ export default function TabSiswa() {
     const qRef = query(
       collection(db, "students"),
       where("branchId", "==", branchId),
+
       orderBy("createdAt", "desc"),
     );
 
@@ -246,6 +248,7 @@ export default function TabSiswa() {
       (snap) => {
         const rows: Student[] = snap.docs.map((d) => {
           const data = d.data() as any;
+
           const type = String(data.type || data.tipe || "Normal");
 
           const tipe: Student["tipe"] =
@@ -262,10 +265,13 @@ export default function TabSiswa() {
             name: String(data.name || data.nama || "").trim(),
             tipe,
             sppDefault: Number(data.sppDefault ?? data.spp ?? 0) || 0,
+            active: data.active !== false, // ⬅️ penting
           };
         });
 
-        setSiswa(rows);
+        const activeRows = rows.filter((s) => s.active);
+        setSiswa(activeRows);
+
         setLoadingSiswa(false);
 
         // amankan selected kalau data berubah
@@ -276,9 +282,8 @@ export default function TabSiswa() {
         });
       },
       (err) => {
-        console.log(err);
+        console.log("students query error:", err?.code, err?.message);
         setLoadingSiswa(false);
-        Alert.alert("Gagal", "Tidak bisa mengambil data siswa.");
       },
     );
 
@@ -499,8 +504,14 @@ export default function TabSiswa() {
                 </View>
               ) : (
                 (() => {
-                  const dataToShow =
+                  const baseData =
                     filterMode === "terbayar" ? sudahBayar : belumBayar;
+
+                  const qq = q.trim().toLowerCase();
+
+                  const dataToShow = !qq
+                    ? baseData
+                    : baseData.filter((s) => s.name.toLowerCase().includes(qq));
 
                   if (dataToShow.length === 0) {
                     return (
