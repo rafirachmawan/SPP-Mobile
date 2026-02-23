@@ -43,6 +43,7 @@ type Student = {
   cabangNama: string; // hasil join dari branches
   tipe: string;
   spp: number;
+  active: boolean; // ✅ TAMBAHKAN INI
 };
 
 type PaidRow = {
@@ -124,6 +125,11 @@ export default function SiswaByCabangPage() {
   const [q, setQ] = useState("");
   const [selected, setSelected] = useState<Student | null>(null);
 
+  // ================= STATUS BAYAR BULAN INI =================
+  const [sudahBayar, setSudahBayar] = useState<Student[]>([]);
+  const [belumBayar, setBelumBayar] = useState<Student[]>([]);
+  const [filterMode, setFilterMode] = useState<"terbayar" | "belum">("belum");
+
   // ✅ modal preview bukti
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<PaidRow | null>(null);
@@ -198,7 +204,14 @@ export default function SiswaByCabangPage() {
   useEffect(() => {
     setLoadingSiswa(true);
 
-    const qRef = query(collection(db, "students"), orderBy("name", "asc"));
+    const qRef =
+      cabang === "Semua"
+        ? query(collection(db, "students"), orderBy("createdAt", "desc"))
+        : query(
+            collection(db, "students"),
+            where("branchId", "==", cabang),
+            orderBy("createdAt", "desc"),
+          );
 
     const unsub = onSnapshot(
       qRef,
@@ -220,6 +233,7 @@ export default function SiswaByCabangPage() {
             cabangNama: cabangId ? cabangNameById(cabangId) : "-",
             tipe,
             spp,
+            active: data.active !== false,
           };
         });
 
@@ -228,13 +242,14 @@ export default function SiswaByCabangPage() {
           cabangNama: r.cabangId ? cabangNameById(r.cabangId) : "-",
         }));
 
-        setSiswaAll(fixed);
+        const onlyActive = fixed.filter((s) => s.active !== false);
+        setSiswaAll(onlyActive);
         setLoadingSiswa(false);
 
         // amankan selected kalau data berubah
         setSelected((prev) => {
           if (!prev) return prev;
-          const found = fixed.find((x) => x.id === prev.id);
+          const found = onlyActive.find((x) => x.id === prev.id);
           return found || null;
         });
       },
@@ -246,7 +261,7 @@ export default function SiswaByCabangPage() {
     );
 
     return () => unsub();
-  }, [cabangNameById]);
+  }, [cabang, cabangNameById]);
 
   // ===== list siswa sesuai filter cabang + search =====
   const list = useMemo(() => {
@@ -261,6 +276,54 @@ export default function SiswaByCabangPage() {
 
     return base.filter((x) => x.name.toLowerCase().includes(qq));
   }, [siswaAll, cabang, q]);
+
+  // ================= HITUNG SUDAH / BELUM BAYAR =================
+  useEffect(() => {
+    if (!cabang || siswaAll.length === 0) {
+      setSudahBayar([]);
+      setBelumBayar([]);
+      return;
+    }
+
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+
+    const qPay =
+      cabang === "Semua"
+        ? query(
+            collection(db, "payments"),
+            where("monthKey", "==", currentMonthKey),
+          )
+        : query(
+            collection(db, "payments"),
+            where("branchId", "==", cabang),
+            where("monthKey", "==", currentMonthKey),
+          );
+
+    const unsub = onSnapshot(qPay, (snap) => {
+      const paidIds = new Set<string>();
+
+      snap.docs.forEach((d) => {
+        const data = d.data() as any;
+        if (data.studentId) {
+          paidIds.add(String(data.studentId));
+        }
+      });
+
+      const base =
+        cabang === "Semua"
+          ? siswaAll
+          : siswaAll.filter((s) => s.cabangId === cabang);
+
+      const sudah = base.filter((s) => paidIds.has(s.id));
+      const belum = base.filter((s) => !paidIds.has(s.id));
+
+      setSudahBayar(sudah);
+      setBelumBayar(belum);
+    });
+
+    return () => unsub();
+  }, [siswaAll, cabang]);
 
   // ===================== LOAD MUTASI (payments) saat pilih siswa =====================
   useEffect(() => {
@@ -521,35 +584,77 @@ export default function SiswaByCabangPage() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Daftar Siswa</Text>
 
+            {/* ===== TAB TERBAYAR / BELUM ===== */}
+            <View style={styles.segmentWrap}>
+              <TouchableOpacity
+                onPress={() => setFilterMode("terbayar")}
+                style={[
+                  styles.segmentBtn,
+                  filterMode === "terbayar" && styles.segmentActiveBlue,
+                ]}
+              >
+                <Text style={styles.segmentText}>
+                  Terbayar ({sudahBayar.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setFilterMode("belum")}
+                style={[
+                  styles.segmentBtn,
+                  filterMode === "belum" && styles.segmentActiveRed,
+                ]}
+              >
+                <Text style={styles.segmentText}>
+                  Belum ({belumBayar.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={{ marginTop: 12, gap: 10 }}>
               {loadingSiswa ? (
                 <Text style={styles.note}>Memuat siswa...</Text>
-              ) : list.length === 0 ? (
-                <Text style={styles.note}>
-                  Tidak ada siswa untuk filter ini.
-                </Text>
               ) : (
-                list.map((s) => (
-                  <TouchableOpacity
-                    key={s.id}
-                    activeOpacity={0.9}
-                    style={styles.item}
-                    onPress={() => setSelected(s)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.itemTitle}>{s.name}</Text>
-                      <Text style={styles.itemSub}>
-                        {s.cabangNama} • {s.tipe} • Rp{" "}
-                        {s.spp.toLocaleString("id-ID")}
+                (() => {
+                  const baseData =
+                    filterMode === "terbayar" ? sudahBayar : belumBayar;
+
+                  const qq = q.trim().toLowerCase();
+
+                  const dataToShow = !qq
+                    ? baseData
+                    : baseData.filter((s) => s.name.toLowerCase().includes(qq));
+
+                  if (dataToShow.length === 0) {
+                    return (
+                      <Text style={styles.note}>
+                        Tidak ada siswa untuk kategori ini.
                       </Text>
-                    </View>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={22}
-                      color="#94A3B8"
-                    />
-                  </TouchableOpacity>
-                ))
+                    );
+                  }
+
+                  return dataToShow.map((s) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      activeOpacity={0.9}
+                      style={styles.item}
+                      onPress={() => setSelected(s)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.itemTitle}>{s.name}</Text>
+                        <Text style={styles.itemSub}>
+                          {s.cabangNama} • {s.tipe} • Rp{" "}
+                          {s.spp.toLocaleString("id-ID")}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={22}
+                        color="#94A3B8"
+                      />
+                    </TouchableOpacity>
+                  ));
+                })()
               )}
             </View>
 
@@ -1053,6 +1158,35 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
     padding: 10,
   },
+
+  // ===== SEGMENT TAB =====
+  segmentWrap: {
+    marginTop: 14,
+    flexDirection: "row",
+    gap: 10,
+  },
+
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+  },
+
+  segmentActiveBlue: {
+    backgroundColor: "#DBEAFE",
+  },
+
+  segmentActiveRed: {
+    backgroundColor: "#FEE2E2",
+  },
+
+  segmentText: {
+    fontFamily: F.extrabold,
+    color: "#0F172A",
+  },
+
   previewMetaText: { color: "#0F172A", fontFamily: F.bold, lineHeight: 18 },
 
   // // keep old key used in preview header
