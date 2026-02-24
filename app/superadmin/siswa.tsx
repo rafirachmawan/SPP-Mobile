@@ -23,6 +23,7 @@ import {
 } from "react-native-safe-area-context";
 
 // ✅ Firebase
+import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   collection,
   limit,
@@ -129,6 +130,36 @@ export default function SiswaByCabangPage() {
   const [sudahBayar, setSudahBayar] = useState<Student[]>([]);
   const [belumBayar, setBelumBayar] = useState<Student[]>([]);
   const [filterMode, setFilterMode] = useState<"terbayar" | "belum">("belum");
+
+  // ================= RANGE TANGGAL =================
+  const today = new Date();
+
+  const [fromDate, setFromDate] = useState<Date>(
+    new Date(today.getFullYear(), today.getMonth(), 1),
+  );
+
+  const [toDate, setToDate] = useState<Date>(today);
+
+  const [showFromPicker, setShowFromPicker] = useState(false);
+  const [showToPicker, setShowToPicker] = useState(false);
+
+  function atStartOfDay(d: Date) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  }
+
+  function atEndOfDay(d: Date) {
+    return new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate(),
+      23,
+      59,
+      59,
+      999,
+    );
+  }
+
+  const [totalNominalRange, setTotalNominalRange] = useState(0);
 
   // ✅ modal preview bukti
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -277,37 +308,44 @@ export default function SiswaByCabangPage() {
     return base.filter((x) => x.name.toLowerCase().includes(qq));
   }, [siswaAll, cabang, q]);
 
-  // ================= HITUNG SUDAH / BELUM BAYAR =================
+  // ================= HITUNG SUDAH / BELUM BAYAR (RANGE) =================
   useEffect(() => {
-    if (!cabang || siswaAll.length === 0) {
+    if (siswaAll.length === 0) {
       setSudahBayar([]);
       setBelumBayar([]);
+      setTotalNominalRange(0);
       return;
     }
 
-    const now = new Date();
-    const currentMonthKey = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    const f = Timestamp.fromDate(atStartOfDay(fromDate));
+    const t = Timestamp.fromDate(atEndOfDay(toDate));
 
     const qPay =
       cabang === "Semua"
         ? query(
             collection(db, "payments"),
-            where("monthKey", "==", currentMonthKey),
+            where("paidAt", ">=", f),
+            where("paidAt", "<=", t),
           )
         : query(
             collection(db, "payments"),
             where("branchId", "==", cabang),
-            where("monthKey", "==", currentMonthKey),
+            where("paidAt", ">=", f),
+            where("paidAt", "<=", t),
           );
 
     const unsub = onSnapshot(qPay, (snap) => {
       const paidIds = new Set<string>();
+      let total = 0;
 
       snap.docs.forEach((d) => {
         const data = d.data() as any;
+
         if (data.studentId) {
           paidIds.add(String(data.studentId));
         }
+
+        total += Number(data.totalBayar || 0);
       });
 
       const base =
@@ -320,10 +358,11 @@ export default function SiswaByCabangPage() {
 
       setSudahBayar(sudah);
       setBelumBayar(belum);
+      setTotalNominalRange(total);
     });
 
     return () => unsub();
-  }, [siswaAll, cabang]);
+  }, [siswaAll, cabang, fromDate, toDate]);
 
   // ===================== LOAD MUTASI (payments) saat pilih siswa =====================
   useEffect(() => {
@@ -584,6 +623,60 @@ export default function SiswaByCabangPage() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Daftar Siswa</Text>
 
+            <View
+              style={{
+                marginTop: 12,
+                backgroundColor: "#DBEAFE",
+                borderRadius: 14,
+                padding: 12,
+              }}
+            >
+              <Text style={{ fontFamily: F.bold, color: "#1E40AF" }}>
+                Total Masuk (Range Ini)
+              </Text>
+
+              <Text
+                style={{
+                  marginTop: 6,
+                  fontFamily: F.extrabold,
+                  fontSize: 18,
+                  color: "#0F172A",
+                }}
+              >
+                Rp {totalNominalRange.toLocaleString("id-ID")}
+              </Text>
+            </View>
+
+            <View style={{ marginTop: 12, gap: 10 }}>
+              <Text style={{ fontFamily: F.bold, color: "#0F172A" }}>
+                Pilih Range Tanggal
+              </Text>
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                {/* FROM */}
+                <TouchableOpacity
+                  style={styles.selectBox}
+                  onPress={() => setShowFromPicker(true)}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.selectValue}>
+                    Dari: {formatTanggal(fromDate)}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* TO */}
+                <TouchableOpacity
+                  style={styles.selectBox}
+                  onPress={() => setShowToPicker(true)}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.selectValue}>
+                    Sampai: {formatTanggal(toDate)}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
             {/* ===== TAB TERBAYAR / BELUM ===== */}
             <View style={styles.segmentWrap}>
               <TouchableOpacity
@@ -833,6 +926,36 @@ export default function SiswaByCabangPage() {
           </View>
         </View>
       </Modal>
+
+      {/* FROM DATE PICKER */}
+      {showFromPicker && (
+        <DateTimePicker
+          value={fromDate}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setShowFromPicker(false);
+            if (selectedDate) {
+              setFromDate(selectedDate);
+            }
+          }}
+        />
+      )}
+
+      {/* TO DATE PICKER */}
+      {showToPicker && (
+        <DateTimePicker
+          value={toDate}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setShowToPicker(false);
+            if (selectedDate) {
+              setToDate(selectedDate);
+            }
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

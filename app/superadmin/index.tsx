@@ -22,7 +22,13 @@ import {
 } from "react-native-safe-area-context";
 
 // ✅ Firebase
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  query,
+  Timestamp,
+  where,
+} from "firebase/firestore";
 import { db } from "../../firebase";
 
 const SPREADSHEET_URL =
@@ -87,19 +93,39 @@ export default function SuperadminDashboard() {
       setSummary((p) => ({ ...p, siswa: snap.size }));
     });
 
-    // ✅ PEMBAYARAN BULAN INI
-    const qInvoices = query(
-      collection(db, "invoices"),
-      where("monthKey", "==", mkNow),
-      where("status", "==", "PAID"),
+    // ✅ PEMBAYARAN BULAN INI (REAL MONEY FROM PAYMENTS)
+    const now = new Date();
+    const startOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
     );
-    const unsubInvoices = onSnapshot(qInvoices, (snap) => {
+
+    const endOfNow = new Date();
+
+    const qPayments = query(
+      collection(db, "payments"),
+      where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
+      where("paidAt", "<=", Timestamp.fromDate(endOfNow)),
+    );
+
+    const unsubPayments = onSnapshot(qPayments, (snap) => {
       let total = 0;
+
       snap.docs.forEach((d) => {
         const data = d.data() as any;
-        total += Number(data.total || 0) || 0;
+        total += Number(data.totalBayar || 0) || 0;
       });
-      setSummary((p) => ({ ...p, bayarBulanIniNominal: total }));
+
+      setSummary((p) => ({
+        ...p,
+        bayarBulanIniNominal: total,
+      }));
+
       setLoading(false);
     });
 
@@ -107,7 +133,7 @@ export default function SuperadminDashboard() {
       unsubBranches();
       unsubAdmins();
       unsubStudents();
-      unsubInvoices();
+      unsubPayments(); // ✅ ganti dari unsubInvoices
     };
   }, [mkNow]);
 

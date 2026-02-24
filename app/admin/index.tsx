@@ -21,6 +21,7 @@ import {
   getDoc,
   onSnapshot,
   query,
+  Timestamp,
   where,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
@@ -136,22 +137,42 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (!branchId) return;
-    const qInv = query(
-      collection(db, "invoices"),
-      where("branchId", "==", branchId),
-      where("monthKey", "==", mkNow),
-      where("status", "==", "PAID"),
+
+    setStatsLoading(true);
+
+    // ✅ Ambil awal bulan
+    const now = new Date();
+    const startOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
     );
 
-    const unsub = onSnapshot(qInv, (snap) => {
-      const uniq = new Set<string>();
+    const endOfNow = new Date();
+
+    const qRef = query(
+      collection(db, "payments"),
+      where("branchId", "==", branchId),
+      where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
+      where("paidAt", "<=", Timestamp.fromDate(endOfNow)),
+    );
+
+    const unsub = onSnapshot(qRef, (snap) => {
       let totalNominal = 0;
+      const uniq = new Set<string>();
 
       snap.docs.forEach((d) => {
         const data = d.data() as any;
+
+        const total = Number(data.totalBayar || 0);
         const sid = String(data.studentId || "").trim();
+
+        totalNominal += total;
         if (sid) uniq.add(sid);
-        totalNominal += Number(data.total || 0) || 0;
       });
 
       setSudahBayarBulanIni(uniq.size);
@@ -160,7 +181,7 @@ export default function AdminDashboard() {
     });
 
     return () => unsub();
-  }, [branchId, mkNow]);
+  }, [branchId]);
 
   /* ===== MENU (TIDAK DIUBAH) ===== */
   const actions = [
