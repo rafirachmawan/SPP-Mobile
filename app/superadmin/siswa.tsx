@@ -26,13 +26,14 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import {
   collection,
+  deleteDoc,
   doc,
   limit,
   onSnapshot,
   orderBy,
   query,
   Timestamp,
-  updateDoc,
+  updateDoc, // ✅ TAMBAHKAN INI
   where,
 } from "firebase/firestore";
 import { db } from "../../firebase"; // ✅ sesuaikan path
@@ -51,6 +52,7 @@ type Student = {
 
 type PaidRow = {
   id: string;
+  invoiceNo: string; // 🔥 TAMBAHKAN
   bulan: string;
   tanggal: string;
   jam: string;
@@ -285,7 +287,7 @@ export default function SiswaByCabangPage() {
       // 2️⃣ UPDATE SPREADSHEET (SAMA ADMIN)
       // ===============================
       const response = await fetch(
-        "https://script.google.com/macros/s/AKfycbwIaJbNqSf2rWOkWQMeUTlUwlP-5ox5czeR3W2SM359lCegX7eLeC-BJl2IsmAdN3tqkg/exec",
+        "https://script.google.com/macros/s/AKfycbzcFUdS5zlOjcwB5J5LTcWLV5rWwOKifcABxz3hTVbM1Q36UEpZMZYtrnLrmpsDbXnUBA/exec",
         {
           method: "POST",
           redirect: "follow",
@@ -294,14 +296,14 @@ export default function SiswaByCabangPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            paymentId: editItem.id,
-            branchName: selected.cabangNama, // ambil dari student
+            action: "upsert",
+            paymentId: editItem.id.trim(), // tetap pakai doc id
+            branchName: selected.cabangNama.trim(),
             tanggal: editTanggal,
             jam: editJam,
             jenisPembayaran: editBulan,
             studentName: selected.name,
             studentType: selected.tipe,
-
             metode: editMetode,
             nominalSebelumVoucher: nominal,
             voucherSpin: potongan,
@@ -323,6 +325,78 @@ export default function SiswaByCabangPage() {
     } catch (e: any) {
       Alert.alert("Gagal", e?.message || "Gagal update pembayaran");
     }
+  }
+
+  // ===============================
+  // 🔥 DELETE TRANSAKSI (SUPERADMIN ONLY)
+  // ===============================
+  // ===============================
+  // 🔥 DELETE TRANSAKSI (SUPERADMIN ONLY)
+  // ===============================
+  async function handleDelete(item: PaidRow) {
+    if (!selected) return;
+
+    Alert.alert(
+      "Hapus Transaksi",
+      "Yakin ingin menghapus transaksi ini? Data akan hilang permanen.",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // 🔥 DEBUG
+              console.log("DELETE FIRESTORE ID:", item.id);
+              console.log("DELETE SHEET ID:", item.invoiceNo);
+
+              // // 1️⃣ HAPUS FIRESTORE (pakai document id)
+              await deleteDoc(doc(db, "payments", item.id));
+
+              // 2️⃣ HAPUS SPREADSHEET (pakai invoiceNo)
+              const res = await fetch(
+                "https://script.google.com/macros/s/AKfycbwiwoX3wnwkGj-0v3UB-fjukXEahO4tc4aafbnBDN2GNWt6l1vzSE7asQ0ip1K2Y1zFqA/exec ",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    action: "delete",
+                    paymentId: item.invoiceNo.trim(), // 🔥 PAKAI INV
+                    branchName: selected.cabangNama.trim(),
+                  }),
+                },
+              );
+
+              const raw = await res.text();
+              console.log("DELETE SHEET RESPONSE RAW:", raw);
+
+              const parsed = JSON.parse(raw);
+              console.log("DELETE SHEET RESPONSE PARSED:", parsed);
+
+              if (!parsed.ok) {
+                throw new Error(parsed.error || "Sheet delete gagal");
+              }
+
+              if (parsed.action === "deleted") {
+                Alert.alert("Berhasil", "Transaksi berhasil dihapus.");
+              } else if (parsed.action === "not_found") {
+                Alert.alert("Warning", "Data tidak ditemukan di Spreadsheet.");
+              } else {
+                Alert.alert("Info", "Tidak ada data yang dihapus.");
+              }
+            } catch (err: any) {
+              console.log("DELETE ERROR:", err);
+              Alert.alert(
+                "Error",
+                err?.message || "Gagal menghapus transaksi.",
+              );
+            }
+          },
+        },
+      ],
+    );
   }
 
   function closeEdit() {
@@ -578,6 +652,7 @@ export default function SiswaByCabangPage() {
 
           return {
             id: d.id,
+            invoiceNo: data.invoiceNo || data.paymentGroupId || d.id, // 🔥 TAMBAHKAN INI
             bulan,
             tanggal: paidAt ? formatTanggal(paidAt) : "-",
             jam: paidAt ? formatJam(paidAt) : "-",
@@ -1026,6 +1101,22 @@ export default function SiswaByCabangPage() {
                           style={{ fontFamily: F.extrabold, color: "#1E40AF" }}
                         >
                           Edit Pembayaran
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDelete(m)}
+                        style={{
+                          marginTop: 6,
+                          backgroundColor: "#FEE2E2",
+                          paddingVertical: 6,
+                          borderRadius: 10,
+                          alignItems: "center",
+                        }}
+                      >
+                        <Text
+                          style={{ fontFamily: F.extrabold, color: "#DC2626" }}
+                        >
+                          Hapus Transaksi
                         </Text>
                       </TouchableOpacity>
                     </TouchableOpacity>

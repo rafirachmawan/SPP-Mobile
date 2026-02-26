@@ -206,6 +206,7 @@ function buildPotonganByMonth(
  * ✅ Push pembayaran ke Google Sheet via Apps Script WebApp
  */
 async function pushPaymentToSheet(payload: {
+  paymentId: string; // ✅ TAMBAH BARIS INI
   voucherSpinDetail?: string;
   invoiceNo: string;
   branchId?: string;
@@ -231,7 +232,7 @@ async function pushPaymentToSheet(payload: {
 }) {
   try {
     const res = await fetch(
-      "https://script.google.com/macros/s/AKfycbwIaJbNqSf2rWOkWQMeUTlUwlP-5ox5czeR3W2SM359lCegX7eLeC-BJl2IsmAdN3tqkg/exec",
+      "https://script.google.com/macros/s/AKfycbwiwoX3wnwkGj-0v3UB-fjukXEahO4tc4aafbnBDN2GNWt6l1vzSE7asQ0ip1K2Y1zFqA/exec ",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1676,8 +1677,11 @@ export default function BayarSPP() {
         const now = new Date();
 
         for (const row of sheetRows) {
+          const sheetInvoiceId = invoiceNoOf(branchId, row.mk, selected.id);
+
           await pushPaymentToSheet({
-            invoiceNo: invoiceDraft.paymentGroupId,
+            paymentId: sheetInvoiceId,
+            invoiceNo: sheetInvoiceId,
             branchId,
             branchName,
 
