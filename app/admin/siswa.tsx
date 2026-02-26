@@ -1,5 +1,6 @@
 // FILE: app/admin/siswa.tsx
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -32,6 +33,7 @@ import {
   orderBy,
   query,
   Timestamp,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
@@ -100,6 +102,16 @@ function monthLabelFromMonthKey(monthKey: string) {
   return bulanIndo(d);
 }
 
+// ===== FORMAT RUPIAH INPUT =====
+function formatRupiahInput(value: string) {
+  const number = value.replace(/\D/g, "");
+  return number.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function parseRupiah(value: string) {
+  return Number(value.replace(/\./g, "")) || 0;
+}
+
 function DetailRow({
   label,
   value,
@@ -152,6 +164,18 @@ export default function TabSiswa() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<PaidRow | null>(null);
 
+  // ✅ STATE EDIT
+  const [editOpen, setEditOpen] = useState(false);
+  const [editItem, setEditItem] = useState<PaidRow | null>(null);
+
+  const [editNominal, setEditNominal] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [editPotongan, setEditPotongan] = useState("");
+  const [editMetode, setEditMetode] = useState<"Cash" | "Transfer">("Cash");
+  const [editTanggal, setEditTanggal] = useState("");
+  const [editJam, setEditJam] = useState("");
+  const [editBulan, setEditBulan] = useState("");
+
   function openPreview(item: PaidRow) {
     if (!item.proofDataUrl) return;
     setPreviewItem(item);
@@ -160,6 +184,123 @@ export default function TabSiswa() {
   function closePreview() {
     setPreviewOpen(false);
     setPreviewItem(null);
+  }
+  function openEdit(item: PaidRow) {
+    setEditItem(item);
+    setEditNominal(formatRupiahInput(String(item.nominal)));
+    setEditPotongan(String(item.potonganSpin));
+    setEditMetode(item.metode);
+
+    setEditTanggal(item.tanggalBayar);
+    setEditJam(item.jamBayar);
+    setEditBulan(item.bulan);
+
+    setEditOpen(true);
+  }
+
+  function closeEdit() {
+    setEditOpen(false);
+    setEditItem(null);
+  }
+
+  async function handleSaveEdit() {
+    if (!editItem) return;
+
+    try {
+      const totalBayar = parseRupiah(editNominal);
+      const potongan = parseRupiah(editPotongan);
+
+      // Convert tanggal + jam ke Date
+      const [dd, mm, yyyy] = editTanggal.split("-");
+      const [hh, min] = editJam.split(":");
+
+      const newDate = new Date(
+        Number(yyyy),
+        Number(mm) - 1,
+        Number(dd),
+        Number(hh),
+        Number(min),
+      );
+
+      // Convert bulan ke monthKey (YYYY-MM)
+      let newMonthKey = "";
+      try {
+        const parts = editBulan.split(" ");
+        const monthName = parts[0];
+        const year = parts[1];
+
+        const bulanList = [
+          "Januari",
+          "Februari",
+          "Maret",
+          "April",
+          "Mei",
+          "Juni",
+          "Juli",
+          "Agustus",
+          "September",
+          "Oktober",
+          "November",
+          "Desember",
+        ];
+
+        const monthIndex = bulanList.indexOf(monthName) + 1;
+
+        if (monthIndex > 0) {
+          newMonthKey = `${year}-${String(monthIndex).padStart(2, "0")}`;
+        }
+      } catch {}
+
+      // UPDATE FIRESTORE FULL
+      await updateDoc(doc(db, "payments", editItem.id), {
+        total: totalBayar, // untuk history
+        totalBayar: totalBayar, // 🔥 untuk dashboard
+        potongan,
+        metode: editMetode,
+        paidAt: newDate,
+        monthKey: newMonthKey || null,
+      });
+
+      // 2️⃣ KIRIM KE SPREADSHEET (UPSERT)
+      const response = await fetch(
+        "https://script.google.com/macros/s/AKfycbwIaJbNqSf2rWOkWQMeUTlUwlP-5ox5czeR3W2SM359lCegX7eLeC-BJl2IsmAdN3tqkg/exec",
+        {
+          method: "POST",
+          redirect: "follow",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            paymentId: editItem.id,
+            branchName: branchName,
+            tanggal: editTanggal,
+            jam: editJam,
+            jenisPembayaran: editBulan,
+            studentName: selected?.name,
+            studentType: selected?.tipe,
+
+            metode: editMetode,
+            nominalSebelumVoucher: totalBayar, // kalau memang mau kirim angka yang sama
+            voucherSpin: potongan,
+            voucherManual: 0,
+            totalVoucher: potongan,
+            voucherSpinDetail: "-",
+            totalDibayar: totalBayar,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText);
+      }
+
+      Alert.alert("Berhasil", "Pembayaran berhasil diperbarui");
+      closeEdit();
+    } catch (e: any) {
+      Alert.alert("Gagal", e?.message || "Gagal update pembayaran");
+    }
   }
 
   // ===================== Ambil branchId dari users/{uid} =====================
@@ -326,8 +467,10 @@ export default function TabSiswa() {
           const total =
             Number(data.total || 0) || Math.max(nominal - potongan, 0);
 
+          const invoiceNo = String(data.invoiceNo || d.id);
+
           return {
-            id: d.id,
+            id: invoiceNo, // 🔥 WAJIB GANTI
             bulan,
             tanggalBayar: paidAt ? formatTanggal(paidAt) : "-",
             jamBayar: paidAt ? formatJam(paidAt) : "-",
@@ -335,8 +478,6 @@ export default function TabSiswa() {
             potonganSpin: potongan,
             dibayar: total,
             metode: (data.metode as "Cash" | "Transfer") || "Cash",
-
-            // ✅ FIX: field bukti sama dengan Bayar SPP (proofDataUrl)
             proofDataUrl: data.proofDataUrl || null,
             proofType: (data.proofType as any) || null,
           };
@@ -654,6 +795,21 @@ export default function TabSiswa() {
                           * Tap untuk lihat bukti pembayaran
                         </Text>
                       )}
+
+                      <TouchableOpacity
+                        onPress={() => openEdit(m)}
+                        style={{
+                          marginTop: 10,
+                          backgroundColor: "#DBEAFE",
+                          paddingVertical: 6,
+                          borderRadius: 10,
+                          alignItems: "center",
+                        }}
+                      >
+                        <Text style={{ fontWeight: "800", color: "#1E40AF" }}>
+                          Edit Pembayaran
+                        </Text>
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   );
                 })}
@@ -741,6 +897,105 @@ export default function TabSiswa() {
                 </>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={editOpen} transparent animationType="fade">
+        <View style={styles.previewBackdrop}>
+          <View style={styles.editCard}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.modalTitle}>Edit Pembayaran</Text>
+              <TouchableOpacity onPress={closeEdit} style={styles.xBtn}>
+                <Ionicons name="close" size={18} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+
+            {/* PERIODE */}
+            <Text style={styles.editLabel}>Periode</Text>
+            <View style={styles.editBox}>
+              <Text style={styles.editValue}>{editBulan}</Text>
+            </View>
+
+            {/* NOMINAL */}
+            <Text style={styles.editLabel}>Nominal</Text>
+            <View style={styles.rpInputWrap}>
+              <Text style={styles.rpPrefix}>Rp</Text>
+              <TextInput
+                value={editNominal}
+                onChangeText={(text) => setEditNominal(formatRupiahInput(text))}
+                keyboardType="numeric"
+                style={styles.rpInput}
+              />
+            </View>
+
+            {/* POTONGAN */}
+            <Text style={styles.editLabel}>Potongan</Text>
+            <View style={styles.rpInputWrap}>
+              <Text style={styles.rpPrefix}>Rp</Text>
+              <TextInput
+                value={editPotongan}
+                onChangeText={(text) =>
+                  setEditPotongan(formatRupiahInput(text))
+                }
+                keyboardType="numeric"
+                style={styles.rpInput}
+              />
+            </View>
+
+            {/* TANGGAL */}
+            <Text style={styles.editLabel}>Tanggal</Text>
+            <TouchableOpacity
+              style={styles.editBox}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Text style={styles.editValue}>{editTanggal}</Text>
+            </TouchableOpacity>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={new Date()}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  setShowDatePicker(false);
+                  if (date) {
+                    setEditTanggal(formatTanggal(date));
+                    setEditJam(formatJam(date));
+                  }
+                }}
+              />
+            )}
+
+            {/* METODE */}
+            <Text style={styles.editLabel}>Metode</Text>
+            <View style={styles.segmentWrap}>
+              <TouchableOpacity
+                onPress={() => setEditMetode("Cash")}
+                style={[
+                  styles.segmentBtn,
+                  editMetode === "Cash" && styles.segmentActiveBlue,
+                ]}
+              >
+                <Text style={styles.segmentText}>Cash</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setEditMetode("Transfer")}
+                style={[
+                  styles.segmentBtn,
+                  editMetode === "Transfer" && styles.segmentActiveBlue,
+                ]}
+              >
+                <Text style={styles.segmentText}>Transfer</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleSaveEdit}
+              style={styles.primaryBtn}
+            >
+              <Text style={styles.primaryText}>Simpan Perubahan</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1059,6 +1314,71 @@ const styles = StyleSheet.create({
 
   segmentTextActive: {
     color: "#0F172A",
+  },
+  editCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    padding: 18,
+    gap: 10,
+  },
+
+  editLabel: {
+    marginTop: 6,
+    fontWeight: "800",
+    color: "#475569",
+    fontSize: 12,
+  },
+
+  editBox: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+
+  editValue: {
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+
+  rpInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 12,
+  },
+
+  rpPrefix: {
+    fontWeight: "900",
+    marginRight: 6,
+    color: "#0F172A",
+  },
+
+  rpInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+
+  primaryBtn: {
+    marginTop: 16,
+    backgroundColor: "#16A34A",
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+
+  primaryText: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 14,
   },
 
   previewMetaText: { color: "#0F172A", fontWeight: "700", lineHeight: 18 },
