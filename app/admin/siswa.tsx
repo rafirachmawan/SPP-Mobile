@@ -206,9 +206,15 @@ export default function TabSiswa() {
   async function handleSaveEdit() {
     if (!editItem) return;
 
+    if (!editTanggal || !editJam) {
+      Alert.alert("Error", "Tanggal atau jam tidak valid");
+      return;
+    }
+
     try {
-      const totalBayar = parseRupiah(editNominal);
+      const nominal = parseRupiah(editNominal);
       const potongan = parseRupiah(editPotongan);
+      const totalFinal = Math.max(nominal - potongan, 0);
 
       // Convert tanggal + jam ke Date
       const [dd, mm, yyyy] = editTanggal.split("-");
@@ -253,9 +259,10 @@ export default function TabSiswa() {
 
       // UPDATE FIRESTORE FULL
       await updateDoc(doc(db, "payments", editItem.id), {
-        total: totalBayar, // untuk history
-        totalBayar: totalBayar, // 🔥 untuk dashboard
+        nominal,
         potongan,
+        total: totalFinal,
+        totalBayar: totalFinal,
         metode: editMetode,
         paidAt: newDate,
         monthKey: newMonthKey || null,
@@ -281,12 +288,12 @@ export default function TabSiswa() {
             studentType: selected?.tipe,
 
             metode: editMetode,
-            nominalSebelumVoucher: totalBayar, // kalau memang mau kirim angka yang sama
+            nominalSebelumVoucher: nominal,
             voucherSpin: potongan,
             voucherManual: 0,
             totalVoucher: potongan,
             voucherSpinDetail: "-",
-            totalDibayar: totalBayar,
+            totalDibayar: totalFinal,
           }),
         },
       );
@@ -470,7 +477,8 @@ export default function TabSiswa() {
           const invoiceNo = String(data.invoiceNo || d.id);
 
           return {
-            id: invoiceNo, // 🔥 WAJIB GANTI
+            id: d.id,
+            invoiceNo: String(data.invoiceNo || d.id),
             bulan,
             tanggalBayar: paidAt ? formatTanggal(paidAt) : "-",
             jamBayar: paidAt ? formatJam(paidAt) : "-",
@@ -953,7 +961,18 @@ export default function TabSiswa() {
 
             {showDatePicker && (
               <DateTimePicker
-                value={new Date()}
+                value={
+                  editTanggal
+                    ? (() => {
+                        const [dd, mm, yyyy] = editTanggal.split("-");
+                        return new Date(
+                          Number(yyyy),
+                          Number(mm) - 1,
+                          Number(dd),
+                        );
+                      })()
+                    : new Date()
+                }
                 mode="date"
                 display="default"
                 onChange={(event, date) => {
