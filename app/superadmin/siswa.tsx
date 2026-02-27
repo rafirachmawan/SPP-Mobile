@@ -28,12 +28,13 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   limit,
-  onSnapshot,
+  onSnapshot, // ✅ TAMBAHKAN INI
   orderBy,
   query,
   Timestamp,
-  updateDoc, // ✅ TAMBAHKAN INI
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { db } from "../../firebase"; // ✅ sesuaikan path
@@ -112,11 +113,14 @@ function monthLabelFromMonthKey(monthKey: string) {
 
 function formatRupiahInput(value: string) {
   const number = value.replace(/\D/g, "");
-  return number.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  if (!number) return "Rp ";
+  const formatted = number.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return "Rp " + formatted;
 }
 
 function parseRupiah(value: string) {
-  return Number(value.replace(/\./g, "")) || 0;
+  const clean = value.replace(/[^0-9]/g, "");
+  return Number(clean) || 0;
 }
 
 export default function SiswaByCabangPage() {
@@ -411,12 +415,14 @@ export default function SiswaByCabangPage() {
 
   // ===================== LOAD CABANG (branches) =====================
   useEffect(() => {
-    setLoadingCabang(true);
-    const qRef = query(collection(db, "branches"), orderBy("createdAt", "asc"));
+    async function loadCabang() {
+      try {
+        setLoadingCabang(true);
 
-    const unsub = onSnapshot(
-      qRef,
-      (snap) => {
+        const snap = await getDocs(
+          query(collection(db, "branches"), orderBy("createdAt", "asc")),
+        );
+
         const rows: Cabang[] = snap.docs.map((d) => {
           const data = d.data() as any;
           return {
@@ -424,17 +430,17 @@ export default function SiswaByCabangPage() {
             nama: String(data.name || data.branchName || "").trim(),
           };
         });
-        setCabangRows(rows);
-        setLoadingCabang(false);
-      },
-      (err) => {
-        console.log(err);
-        setLoadingCabang(false);
-        Alert.alert("Gagal", "Tidak bisa mengambil data unit.");
-      },
-    );
 
-    return () => unsub();
+        setCabangRows(rows);
+      } catch (err) {
+        console.log(err);
+        Alert.alert("Gagal", "Tidak bisa mengambil data unit.");
+      } finally {
+        setLoadingCabang(false);
+      }
+    }
+
+    loadCabang();
   }, []);
 
   // cabangList utk filter (Semua + hasil branches)
@@ -463,26 +469,26 @@ export default function SiswaByCabangPage() {
 
   // ===================== LOAD SISWA (students) =====================
   useEffect(() => {
-    setLoadingSiswa(true);
+    async function loadSiswa() {
+      try {
+        setLoadingSiswa(true);
 
-    const qRef =
-      cabang === "Semua"
-        ? query(collection(db, "students"), orderBy("createdAt", "desc"))
-        : query(
-            collection(db, "students"),
-            where("branchId", "==", cabang),
-            orderBy("createdAt", "desc"),
-          );
+        const qRef =
+          cabang === "Semua"
+            ? query(collection(db, "students"), orderBy("createdAt", "desc"))
+            : query(
+                collection(db, "students"),
+                where("branchId", "==", cabang),
+                orderBy("createdAt", "desc"),
+              );
 
-    const unsub = onSnapshot(
-      qRef,
-      (snap) => {
+        const snap = await getDocs(qRef);
+
         const rows: Student[] = snap.docs.map((d) => {
           const data = d.data() as any;
 
           const cabangId = String(data.cabangId || data.branchId || "").trim();
           const name = String(data.name || data.nama || "").trim();
-
           const tipe = String(data.tipe || data.type || "Normal");
           const spp =
             Number(data.sppDefault ?? data.spp ?? data.nominalSpp ?? 0) || 0;
@@ -498,30 +504,16 @@ export default function SiswaByCabangPage() {
           };
         });
 
-        const fixed = rows.map((r) => ({
-          ...r,
-          cabangNama: r.cabangId ? cabangNameById(r.cabangId) : "-",
-        }));
-
-        const onlyActive = fixed.filter((s) => s.active !== false);
-        setSiswaAll(onlyActive);
-        setLoadingSiswa(false);
-
-        // amankan selected kalau data berubah
-        setSelected((prev) => {
-          if (!prev) return prev;
-          const found = onlyActive.find((x) => x.id === prev.id);
-          return found || null;
-        });
-      },
-      (err) => {
+        setSiswaAll(rows.filter((s) => s.active !== false));
+      } catch (err) {
         console.log(err);
-        setLoadingSiswa(false);
         Alert.alert("Gagal", "Tidak bisa mengambil data siswa.");
-      },
-    );
+      } finally {
+        setLoadingSiswa(false);
+      }
+    }
 
-    return () => unsub();
+    loadSiswa();
   }, [cabang, cabangNameById]);
 
   // ===== list siswa sesuai filter cabang + search =====
@@ -540,41 +532,41 @@ export default function SiswaByCabangPage() {
 
   // ================= HITUNG SUDAH / BELUM BAYAR (RANGE) =================
   useEffect(() => {
-    if (siswaAll.length === 0) {
-      setSudahBayar([]);
-      setBelumBayar([]);
-      setTotalNominalRange(0);
-      return;
-    }
+    async function loadRangePayment() {
+      if (siswaAll.length === 0) {
+        setSudahBayar([]);
+        setBelumBayar([]);
+        setTotalNominalRange(0);
+        return;
+      }
 
-    const f = Timestamp.fromDate(atStartOfDay(fromDate));
-    const t = Timestamp.fromDate(atEndOfDay(toDate));
+      const f = Timestamp.fromDate(atStartOfDay(fromDate));
+      const t = Timestamp.fromDate(atEndOfDay(toDate));
 
-    const qPay =
-      cabang === "Semua"
-        ? query(
-            collection(db, "payments"),
-            where("paidAt", ">=", f),
-            where("paidAt", "<=", t),
-          )
-        : query(
-            collection(db, "payments"),
-            where("branchId", "==", cabang),
-            where("paidAt", ">=", f),
-            where("paidAt", "<=", t),
-          );
+      const qPay =
+        cabang === "Semua"
+          ? query(
+              collection(db, "payments"),
+              where("paidAt", ">=", f),
+              where("paidAt", "<=", t),
+            )
+          : query(
+              collection(db, "payments"),
+              where("branchId", "==", cabang),
+              where("paidAt", ">=", f),
+              where("paidAt", "<=", t),
+            );
 
-    const unsub = onSnapshot(qPay, (snap) => {
+      const snap = await getDocs(qPay);
+
       const paidIds = new Set<string>();
       let total = 0;
 
       snap.docs.forEach((d) => {
         const data = d.data() as any;
-
         if (data.studentId) {
           paidIds.add(String(data.studentId));
         }
-
         total += Number(data.totalBayar || 0);
       });
 
@@ -583,15 +575,12 @@ export default function SiswaByCabangPage() {
           ? siswaAll
           : siswaAll.filter((s) => s.cabangId === cabang);
 
-      const sudah = base.filter((s) => paidIds.has(s.id));
-      const belum = base.filter((s) => !paidIds.has(s.id));
-
-      setSudahBayar(sudah);
-      setBelumBayar(belum);
+      setSudahBayar(base.filter((s) => paidIds.has(s.id)));
+      setBelumBayar(base.filter((s) => !paidIds.has(s.id)));
       setTotalNominalRange(total);
-    });
+    }
 
-    return () => unsub();
+    loadRangePayment();
   }, [siswaAll, cabang, fromDate, toDate]);
 
   // ===================== LOAD MUTASI (payments) saat pilih siswa =====================
@@ -1208,7 +1197,10 @@ export default function SiswaByCabangPage() {
             <Text style={{ marginTop: 10, fontFamily: F.bold }}>Nominal</Text>
             <TextInput
               value={editNominal}
-              onChangeText={(t) => setEditNominal(formatRupiahInput(t))}
+              onChangeText={(t) => {
+                const clean = t.replace(/[^0-9]/g, "");
+                setEditNominal(formatRupiahInput(clean));
+              }}
               keyboardType="numeric"
               style={styles.selectBox}
             />

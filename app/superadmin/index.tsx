@@ -21,15 +21,16 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import { db } from "../../firebase"; // ⬅ WAJIB ADA
+
 // ✅ Firebase
 import {
   collection,
-  onSnapshot,
+  getDocs,
   query,
   Timestamp,
   where,
 } from "firebase/firestore";
-import { db } from "../../firebase";
 
 const SPREADSHEET_URL =
   "https://docs.google.com/spreadsheets/d/1DE0FwlqtTKN4Uj3ZcfiRYARoYLnPKXcy-iZXxcEKFqw/edit?gid=1484692081#gid=1484692081";
@@ -71,70 +72,64 @@ export default function SuperadminDashboard() {
 
   // ================= REALTIME EFFECT =================
   useEffect(() => {
-    setLoading(true);
+    async function loadData() {
+      try {
+        setLoading(true);
 
-    // ✅ TOTAL UNIT
-    const unsubBranches = onSnapshot(collection(db, "branches"), (snap) => {
-      setSummary((p) => ({ ...p, cabang: snap.size }));
-    });
+        // ================= TOTAL UNIT =================
+        const branchSnap = await getDocs(collection(db, "branches"));
 
-    // ✅ ADMIN UNIT (FIX: AMBIL DARI branch_admins)
-    const qAdmins = query(collection(db, "branch_admins"));
-    const unsubAdmins = onSnapshot(qAdmins, (snap) => {
-      const count = snap.docs.filter(
-        (d) => (d.data() as any)?.aktif !== false,
-      ).length;
+        // ================= TOTAL ADMIN =================
+        const adminSnap = await getDocs(collection(db, "branch_admins"));
+        const adminCount = adminSnap.docs.filter(
+          (d) => (d.data() as any)?.aktif !== false,
+        ).length;
 
-      setSummary((p) => ({ ...p, admin: count }));
-    });
+        // ================= TOTAL SISWA =================
+        const studentSnap = await getDocs(collection(db, "students"));
 
-    // ✅ TOTAL SISWA
-    const unsubStudents = onSnapshot(collection(db, "students"), (snap) => {
-      setSummary((p) => ({ ...p, siswa: snap.size }));
-    });
+        // ================= PEMBAYARAN BULAN INI =================
+        const now = new Date();
+        const startOfMonth = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          1,
+          0,
+          0,
+          0,
+          0,
+        );
 
-    // ✅ PEMBAYARAN BULAN INI (REAL MONEY FROM PAYMENTS)
-    const now = new Date();
-    const startOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0,
-    );
+        const endOfNow = new Date();
 
-    const endOfNow = new Date();
+        const qPayments = query(
+          collection(db, "payments"),
+          where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
+          where("paidAt", "<=", Timestamp.fromDate(endOfNow)),
+        );
 
-    const qPayments = query(
-      collection(db, "payments"),
-      where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
-      where("paidAt", "<=", Timestamp.fromDate(endOfNow)),
-    );
+        const paymentSnap = await getDocs(qPayments);
 
-    const unsubPayments = onSnapshot(qPayments, (snap) => {
-      let total = 0;
+        let total = 0;
+        paymentSnap.docs.forEach((d) => {
+          const data = d.data() as any;
+          total += Number(data.totalBayar || 0);
+        });
 
-      snap.docs.forEach((d) => {
-        const data = d.data() as any;
-        total += Number(data.totalBayar || 0) || 0;
-      });
+        setSummary({
+          cabang: branchSnap.size,
+          admin: adminCount,
+          siswa: studentSnap.size,
+          bayarBulanIniNominal: total,
+        });
+      } catch (err) {
+        console.log("Load dashboard error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
 
-      setSummary((p) => ({
-        ...p,
-        bayarBulanIniNominal: total,
-      }));
-
-      setLoading(false);
-    });
-
-    return () => {
-      unsubBranches();
-      unsubAdmins();
-      unsubStudents();
-      unsubPayments(); // ✅ ganti dari unsubInvoices
-    };
+    loadData();
   }, [mkNow]);
 
   return (
