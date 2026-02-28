@@ -270,7 +270,7 @@ export default function TabSiswa() {
 
       // 2️⃣ KIRIM KE SPREADSHEET (UPSERT)
       const response = await fetch(
-        "https://script.google.com/macros/s/AKfycbwiwoX3wnwkGj-0v3UB-fjukXEahO4tc4aafbnBDN2GNWt6l1vzSE7asQ0ip1K2Y1zFqA/exec ",
+        "https://script.google.com/macros/s/AKfycbwZGJdMIwEo_XDW4lDoOxY21t4Qfv5NvoXY8PAKU-Fb7747LAl2x_dmkUp5zR_JJLcrwg/exec",
         {
           method: "POST",
           redirect: "follow",

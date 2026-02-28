@@ -231,8 +231,16 @@ async function pushPaymentToSheet(payload: {
   createdAtIso?: string;
 }) {
   try {
+    // 🔥 TAMBAHKAN INI
+    console.log("KIRIM KE SHEET:", {
+      branchName: payload.branchName,
+      paymentId: payload.paymentId,
+      invoiceNo: payload.invoiceNo,
+      jenisPembayaran: payload.jenisPembayaran,
+    });
+
     const res = await fetch(
-      "https://script.google.com/macros/s/AKfycbwiwoX3wnwkGj-0v3UB-fjukXEahO4tc4aafbnBDN2GNWt6l1vzSE7asQ0ip1K2Y1zFqA/exec ",
+      "https://script.google.com/macros/s/AKfycbwZGJdMIwEo_XDW4lDoOxY21t4Qfv5NvoXY8PAKU-Fb7747LAl2x_dmkUp5zR_JJLcrwg/exec",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

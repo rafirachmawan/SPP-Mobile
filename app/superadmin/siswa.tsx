@@ -291,7 +291,7 @@ export default function SiswaByCabangPage() {
       // 2️⃣ UPDATE SPREADSHEET (SAMA ADMIN)
       // ===============================
       const response = await fetch(
-        "https://script.google.com/macros/s/AKfycbzcFUdS5zlOjcwB5J5LTcWLV5rWwOKifcABxz3hTVbM1Q36UEpZMZYtrnLrmpsDbXnUBA/exec",
+        "https://script.google.com/macros/s/AKfycbzd9hxaNoeHpqPhWyrlZ1NZHf-qtr4VsdK-QOppQni-3KOmE8pbmKQ8STAkcVh03LP0oQ/exec",
         {
           method: "POST",
           redirect: "follow",
@@ -359,7 +359,7 @@ export default function SiswaByCabangPage() {
 
               // 2️⃣ HAPUS SPREADSHEET (pakai invoiceNo)
               const res = await fetch(
-                "https://script.google.com/macros/s/AKfycbwiwoX3wnwkGj-0v3UB-fjukXEahO4tc4aafbnBDN2GNWt6l1vzSE7asQ0ip1K2Y1zFqA/exec ",
+                "https://script.google.com/macros/s/AKfycbwZGJdMIwEo_XDW4lDoOxY21t4Qfv5NvoXY8PAKU-Fb7747LAl2x_dmkUp5zR_JJLcrwg/exec",
                 {
                   method: "POST",
                   headers: {
