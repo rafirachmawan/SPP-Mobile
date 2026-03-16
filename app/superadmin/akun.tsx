@@ -177,9 +177,7 @@ export default function SuperadminAkun() {
             icon="key-outline"
             title="Ganti Password"
             desc="Ubah password akun superadmin."
-            onPress={() =>
-              Alert.alert("Info", "Nanti: ganti password (Firebase).")
-            }
+            onPress={() => router.push("/superadmin/ganti-password")}
           />
 
           <ActionRow

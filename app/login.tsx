@@ -20,7 +20,11 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ✅ Firebase (LOGIC TETAP)
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase"; // ✅ sesuaikan path
 
@@ -49,6 +53,44 @@ const LS_EMAIL = "spp-login-email-v1"; // simpan user/email (bukan password)
 export default function Login() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  // AUTO LOGIN CHECK
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) return;
+
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
+
+        if (!snap.exists()) return;
+
+        const data = snap.data() as {
+          role?: string;
+          active?: boolean;
+          cabangId?: string;
+        };
+
+        if (data.active === false) {
+          await signOut(auth);
+          return;
+        }
+
+        const role = String(data.role || "").toUpperCase();
+
+        if (role === "SUPERADMIN") {
+          router.replace("/superadmin");
+        }
+
+        if (role === "ADMIN_CABANG") {
+          router.replace("/admin");
+        }
+      } catch (err) {
+        console.log("AUTO LOGIN ERROR", err);
+      }
+    });
+
+    return () => unsub();
+  }, []);
 
   const [email, setEmail] = useState(""); // input "User" (bisa email / username)
   const [password, setPassword] = useState("");

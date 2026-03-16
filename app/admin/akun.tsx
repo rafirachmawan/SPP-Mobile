@@ -19,7 +19,7 @@ import {
 } from "react-native-safe-area-context";
 
 // ✅ Firebase
-import { signOut as signOutAuth } from "firebase/auth";
+import { signOut as signOutAuth, updatePassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
@@ -54,6 +54,9 @@ export default function TabAkun() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [branchName, setBranchName] = useState<string>("-");
+
+  const [oldPass, setOldPass] = useState("");
+  const [newPass, setNewPass] = useState("");
 
   // ===================== LOAD PROFILE USER LOGIN =====================
   useEffect(() => {
@@ -193,6 +196,50 @@ export default function TabAkun() {
     }
   }
 
+  async function handleChangePassword() {
+    const user = auth.currentUser;
+
+    if (!user) {
+      Alert.alert("Error", "User tidak ditemukan");
+      return;
+    }
+
+    Alert.alert(
+      "Ganti Password",
+      "Password akan diganti menjadi password baru.",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Lanjut",
+          onPress: () => {
+            Alert.prompt(
+              "Password Baru",
+              "Masukkan password baru (min 6 karakter)",
+              async (newPassword) => {
+                if (!newPassword || newPassword.length < 6) {
+                  return Alert.alert("Error", "Password minimal 6 karakter");
+                }
+
+                try {
+                  await updatePassword(user, newPassword);
+                  Alert.alert("Berhasil", "Password berhasil diganti.");
+                } catch (e: any) {
+                  if (e.code === "auth/requires-recent-login") {
+                    Alert.alert(
+                      "Login Ulang",
+                      "Silakan logout lalu login kembali sebelum mengganti password.",
+                    );
+                  } else {
+                    Alert.alert("Gagal", e.message);
+                  }
+                }
+              },
+            );
+          },
+        },
+      ],
+    );
+  }
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
       <LinearGradient
@@ -266,6 +313,23 @@ export default function TabAkun() {
         {!loading && profile && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Pengaturan</Text>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.actionRow}
+              onPress={() => router.push("/admin/ganti-password")}
+            >
+              <View style={styles.actionIcon}>
+                <Ionicons name="key-outline" size={18} color="#1E40AF" />
+              </View>
+
+              <View style={{ flex: 1 }}>
+                <Text style={styles.actionTitle}>Ganti Password</Text>
+                <Text style={styles.actionDesc}>Ubah password akun admin</Text>
+              </View>
+
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            </TouchableOpacity>
 
             <TouchableOpacity
               activeOpacity={0.9}

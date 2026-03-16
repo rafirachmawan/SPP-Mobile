@@ -644,11 +644,22 @@ export default function BayarSPP() {
 
   // ===================== BULAN OPSI (JAN - DES) =====================
   const monthOptions = useMemo(() => {
-    return Array.from({ length: 12 }).map((_, i) => {
-      const d = new Date(year, i, 1);
-      return { key: monthKeyOf(d), label: monthLabelOf(d) };
-    });
-  }, [year]);
+    const months = [];
+
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    for (let i = 0; i < 60; i++) {
+      // 5 tahun ke depan
+      const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+
+      months.push({
+        key: monthKeyOf(d),
+        label: monthLabelOf(d),
+      });
+    }
+
+    return months;
+  }, []);
 
   // ===================== INVOICE MODAL STATE =====================
   const [selected, setSelected] = useState<Student | null>(null);
