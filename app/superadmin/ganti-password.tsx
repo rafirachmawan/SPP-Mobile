@@ -27,6 +27,11 @@ export default function GantiPassword() {
   const [confirmPass, setConfirmPass] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // 🔥 tambahan state untuk toggle mata
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
   async function handleChangePassword() {
     try {
       if (!oldPass || !newPass || !confirmPass) {
@@ -79,37 +84,58 @@ export default function GantiPassword() {
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Ganti Password</Text>
       <View style={styles.form}>
+        {/* Password Lama */}
         <View style={styles.inputBox}>
           <Ionicons name="lock-closed-outline" size={18} />
           <TextInput
             placeholder="Password Lama"
-            secureTextEntry
+            secureTextEntry={!showOld}
             value={oldPass}
             onChangeText={setOldPass}
             style={styles.input}
           />
+          <TouchableOpacity onPress={() => setShowOld(!showOld)}>
+            <Ionicons
+              name={showOld ? "eye-off-outline" : "eye-outline"}
+              size={18}
+            />
+          </TouchableOpacity>
         </View>
 
+        {/* Password Baru */}
         <View style={styles.inputBox}>
           <Ionicons name="key-outline" size={18} />
           <TextInput
             placeholder="Password Baru"
-            secureTextEntry
+            secureTextEntry={!showNew}
             value={newPass}
             onChangeText={setNewPass}
             style={styles.input}
           />
+          <TouchableOpacity onPress={() => setShowNew(!showNew)}>
+            <Ionicons
+              name={showNew ? "eye-off-outline" : "eye-outline"}
+              size={18}
+            />
+          </TouchableOpacity>
         </View>
 
+        {/* Konfirmasi Password */}
         <View style={styles.inputBox}>
           <Ionicons name="shield-checkmark-outline" size={18} />
           <TextInput
             placeholder="Konfirmasi Password"
-            secureTextEntry
+            secureTextEntry={!showConfirm}
             value={confirmPass}
             onChangeText={setConfirmPass}
             style={styles.input}
           />
+          <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)}>
+            <Ionicons
+              name={showConfirm ? "eye-off-outline" : "eye-outline"}
+              size={18}
+            />
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
