@@ -23,6 +23,10 @@ import {
 // ✅ OTA Update
 import * as Updates from "expo-updates";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { signOut } from "firebase/auth";
+import { auth } from "../../firebase"; // ⚠️ penting!
+
 // 🎨 Font Map (Inter)
 const F = {
   regular: "Inter_400Regular",
@@ -48,13 +52,26 @@ export default function SuperadminAkun() {
     appVer: "1.0.0",
   };
 
-  function onLogout() {
+  async function onLogout() {
     Alert.alert("Logout", "Keluar dari akun superadmin?", [
       { text: "Batal", style: "cancel" },
       {
         text: "Keluar",
         style: "destructive",
-        onPress: () => router.replace("/login"),
+        onPress: async () => {
+          try {
+            // ✅ tandai logout manual
+            await AsyncStorage.setItem("spp-manual-logout", "1");
+
+            // ✅ logout dari Firebase
+            await signOut(auth);
+
+            // ✅ pindah ke halaman login
+            router.replace("/login");
+          } catch (err) {
+            console.log("LOGOUT ERROR:", err);
+          }
+        },
       },
     ]);
   }

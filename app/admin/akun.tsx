@@ -18,6 +18,8 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
 // ✅ Firebase
 import { signOut as signOutAuth, updatePassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -145,9 +147,20 @@ export default function TabAkun() {
         style: "destructive",
         onPress: async () => {
           try {
+            // ✅ tandai logout manual
+            await AsyncStorage.setItem("spp-manual-logout", "1");
+
+            // ✅ logout Firebase
             await signOutAuth(auth);
-          } catch {}
-          router.replace("/login");
+
+            // optional delay biar makin aman
+            await new Promise((r) => setTimeout(r, 200));
+
+            // ✅ redirect
+            router.replace("/login");
+          } catch (err) {
+            console.log("LOGOUT ERROR:", err);
+          }
         },
       },
     ]);

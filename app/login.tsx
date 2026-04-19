@@ -47,8 +47,9 @@ function normalizeUser(input: string) {
   return `${uname}@cabang.spp`;
 }
 
-const LS_REMEMBER = "spp-login-remember-v1"; // simpan on/off
-const LS_EMAIL = "spp-login-email-v1"; // simpan user/email (bukan password)
+const LS_REMEMBER = "spp-login-remember-v1";
+const LS_EMAIL = "spp-login-email-v1";
+const LS_LOGOUT = "spp-manual-logout"; // ✅ TAMBAHKAN INI
 
 export default function Login() {
   const router = useRouter();
@@ -57,9 +58,19 @@ export default function Login() {
   // AUTO LOGIN CHECK
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) return;
-
       try {
+        const isManualLogout = await AsyncStorage.getItem(LS_LOGOUT);
+
+        // ❗ kalau sebelumnya logout manual → STOP auto login
+        if (isManualLogout === "1") {
+          if (user) {
+            await signOut(auth); // 🔥 paksa clear session
+          }
+          return;
+        }
+
+        if (!user) return;
+
         const snap = await getDoc(doc(db, "users", user.uid));
 
         if (!snap.exists()) return;
@@ -72,7 +83,7 @@ export default function Login() {
 
         if (data.active === false) {
           await signOut(auth);
-          return;
+          return Alert.alert("Ditolak", "Akun nonaktif.");
         }
 
         const role = String(data.role || "").toUpperCase();
@@ -161,6 +172,7 @@ export default function Login() {
     try {
       // 1) Login ke Firebase Auth
       const cred = await signInWithEmailAndPassword(auth, loginEmail, password);
+      await AsyncStorage.removeItem(LS_LOGOUT);
       const uid = cred.user.uid;
 
       // 2) Ambil role dari Firestore: users/{uid}
