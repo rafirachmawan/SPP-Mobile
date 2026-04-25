@@ -540,21 +540,21 @@ export default function SiswaByCabangPage() {
         return;
       }
 
-      const f = Timestamp.fromDate(atStartOfDay(fromDate));
-      const t = Timestamp.fromDate(atEndOfDay(toDate));
+      const now = new Date();
+      const currentMonthKey = `${now.getFullYear()}-${pad2(
+        now.getMonth() + 1,
+      )}`;
 
       const qPay =
         cabang === "Semua"
           ? query(
               collection(db, "payments"),
-              where("paidAt", ">=", f),
-              where("paidAt", "<=", t),
+              where("monthKey", "==", currentMonthKey),
             )
           : query(
               collection(db, "payments"),
               where("branchId", "==", cabang),
-              where("paidAt", ">=", f),
-              where("paidAt", "<=", t),
+              where("monthKey", "==", currentMonthKey),
             );
 
       const snap = await getDocs(qPay);
