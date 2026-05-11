@@ -30,6 +30,7 @@ import {
   collection,
   doc,
   getDoc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -69,6 +70,11 @@ type Tx = {
   status: "Lunas" | "Beasiswa" | "Pending";
 
   proofDataUrl?: string | null;
+};
+
+type Student = {
+  id: string;
+  active?: boolean;
 };
 
 function pad2(n: number) {
@@ -274,6 +280,10 @@ export default function AdminRiwayatTab() {
   const [txs, setTxs] = useState<Tx[]>([]);
   const [loadingTx, setLoadingTx] = useState(false);
 
+  // ✅ STATUS BAYAR BULAN INI
+  const [sudahBayarCount, setSudahBayarCount] = useState(0);
+  const [belumBayarCount, setBelumBayarCount] = useState(0);
+
   useEffect(() => {
     if (!branchId) {
       setTxs([]);
@@ -404,6 +414,62 @@ export default function AdminRiwayatTab() {
     return () => unsub();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId, appliedFrom, appliedTo]);
+
+  // =========================
+  // ✅ HITUNG SUDAH / BELUM BAYAR BULAN INI
+  // =========================
+  useEffect(() => {
+    if (!branchId) {
+      setSudahBayarCount(0);
+      setBelumBayarCount(0);
+      return;
+    }
+
+    const currentMonthKey = `${appliedFrom.getFullYear()}-${pad2(
+      appliedFrom.getMonth() + 1,
+    )}`;
+
+    // 🔥 ambil semua siswa aktif
+    const qStudents = query(
+      collection(db, "students"),
+      where("branchId", "==", branchId),
+    );
+
+    // 🔥 ambil pembayaran bulan ini
+    const qPayments = query(
+      collection(db, "payments"),
+      where("branchId", "==", branchId),
+      where("monthKey", "==", currentMonthKey),
+      limit(500),
+    );
+
+    const unsubStudents = onSnapshot(qStudents, (studentSnap) => {
+      const activeStudents = studentSnap.docs.filter(
+        (d) => d.data()?.active !== false,
+      );
+
+      const totalStudents = activeStudents.length;
+
+      const unsubPayments = onSnapshot(qPayments, (paySnap) => {
+        const paidIds = new Set<string>();
+
+        paySnap.docs.forEach((d) => {
+          const data = d.data() as any;
+
+          if (data.studentId) {
+            paidIds.add(String(data.studentId));
+          }
+        });
+
+        setSudahBayarCount(paidIds.size);
+        setBelumBayarCount(Math.max(totalStudents - paidIds.size, 0));
+      });
+
+      return () => unsubPayments();
+    });
+
+    return () => unsubStudents();
+  }, [branchId, appliedFrom]);
 
   // =========================
   // ✅ FILTER LOCAL (pengaman)
@@ -624,16 +690,54 @@ export default function AdminRiwayatTab() {
                 justifyContent: "space-between",
                 alignItems: "center",
                 marginTop: 10,
+                flexWrap: "wrap",
+                gap: 8,
               }}
             >
-              <View style={styles.badgeCount}>
-                <Text style={styles.badgeText}>
-                  {filteredByMetode.length} trx
-                </Text>
+              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
+                <View style={styles.badgeCount}>
+                  <Text style={styles.badgeText}>
+                    {filteredByMetode.length} trx
+                  </Text>
+                </View>
+
+                {/* ✅ SUDAH BAYAR */}
+                <View
+                  style={[
+                    styles.badgeCount,
+                    {
+                      backgroundColor: "#DCFCE7",
+                      borderColor: "#BBF7D0",
+                    },
+                  ]}
+                >
+                  <Text style={styles.badgeText}>
+                    Sudah ({sudahBayarCount})
+                  </Text>
+                </View>
+
+                {/* ✅ BELUM BAYAR */}
+                <View
+                  style={[
+                    styles.badgeCount,
+                    {
+                      backgroundColor: "#FEE2E2",
+                      borderColor: "#FECACA",
+                    },
+                  ]}
+                >
+                  <Text style={styles.badgeText}>
+                    Belum ({belumBayarCount})
+                  </Text>
+                </View>
               </View>
 
               <Text
-                style={{ fontWeight: "900", color: "#0F172A", fontSize: 14 }}
+                style={{
+                  fontWeight: "900",
+                  color: "#0F172A",
+                  fontSize: 14,
+                }}
               >
                 Omset: Rp {totalOmset.toLocaleString("id-ID")}
               </Text>

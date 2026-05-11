@@ -30,7 +30,7 @@ import {
   doc,
   getDocs,
   limit,
-  onSnapshot, // ✅ TAMBAHKAN INI
+  onSnapshot,
   orderBy,
   query,
   Timestamp,
@@ -157,6 +157,16 @@ export default function SiswaByCabangPage() {
 
   const [toDate, setToDate] = useState<Date>(today);
 
+  const currentMonthKey = `${today.getFullYear()}-${String(
+    today.getMonth() + 1,
+  ).padStart(2, "0")}`;
+
+  const [selectedMonthKey, setSelectedMonthKey] = useState(
+    `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`,
+  );
+
+  const [appliedMonthKey, setAppliedMonthKey] = useState(selectedMonthKey);
+
   const [showFromPicker, setShowFromPicker] = useState(false);
   const [showToPicker, setShowToPicker] = useState(false);
 
@@ -176,6 +186,14 @@ export default function SiswaByCabangPage() {
       59,
       999,
     );
+  }
+
+  function monthKeyFromDate(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function applyMonthFilter() {
+    setAppliedMonthKey(selectedMonthKey);
   }
 
   const [totalNominalRange, setTotalNominalRange] = useState(0);
@@ -530,58 +548,79 @@ export default function SiswaByCabangPage() {
     return base.filter((x) => x.name.toLowerCase().includes(qq));
   }, [siswaAll, cabang, q]);
 
-  // ================= HITUNG SUDAH / BELUM BAYAR (RANGE) =================
+  // ================= HITUNG SUDAH / BELUM BAYAR =================
   useEffect(() => {
-    async function loadRangePayment() {
-      if (siswaAll.length === 0) {
-        setSudahBayar([]);
-        setBelumBayar([]);
-        setTotalNominalRange(0);
-        return;
-      }
+    const qStudents =
+      cabang === "Semua"
+        ? query(collection(db, "students"))
+        : query(collection(db, "students"), where("branchId", "==", cabang));
 
-      const now = new Date();
-      const currentMonthKey = `${now.getFullYear()}-${pad2(
-        now.getMonth() + 1,
-      )}`;
+    const qPayments =
+      cabang === "Semua"
+        ? query(
+            collection(db, "payments"),
+            where("monthKey", "==", appliedMonthKey),
+            limit(1000),
+          )
+        : query(
+            collection(db, "payments"),
+            where("branchId", "==", cabang),
+            where("monthKey", "==", appliedMonthKey),
+            limit(1000),
+          );
 
-      const qPay =
-        cabang === "Semua"
-          ? query(
-              collection(db, "payments"),
-              where("monthKey", "==", currentMonthKey),
-            )
-          : query(
-              collection(db, "payments"),
-              where("branchId", "==", cabang),
-              where("monthKey", "==", currentMonthKey),
-            );
+    const unsubStudents = onSnapshot(qStudents, (studentSnap) => {
+      const activeStudents: Student[] = studentSnap.docs
+        .map((d) => {
+          const data = d.data() as any;
 
-      const snap = await getDocs(qPay);
+          const cabangId = String(data.cabangId || data.branchId || "").trim();
 
-      const paidIds = new Set<string>();
-      let total = 0;
+          return {
+            id: d.id.trim(),
+            name: String(data.name || data.nama || "").trim(),
+            cabangId,
+            cabangNama: cabangId ? cabangNameById(cabangId) : "-",
+            tipe: String(data.tipe || data.type || "Normal"),
+            spp:
+              Number(data.sppDefault ?? data.spp ?? data.nominalSpp ?? 0) || 0,
+            active: data.active !== false,
+          };
+        })
+        .filter((s) => s.active !== false);
 
-      snap.docs.forEach((d) => {
-        const data = d.data() as any;
-        if (data.studentId) {
-          paidIds.add(String(data.studentId));
-        }
-        total += Number(data.totalBayar || 0);
+      const unsubPayments = onSnapshot(qPayments, (paySnap) => {
+        const paidIds = new Set<string>();
+        let total = 0;
+
+        paySnap.docs.forEach((d) => {
+          const data = d.data() as any;
+
+          if (data.studentId) {
+            paidIds.add(String(data.studentId).trim());
+          }
+
+          total += Number(data.totalBayar ?? data.dibayar ?? data.total ?? 0);
+        });
+
+        const sudah = activeStudents.filter((s) =>
+          paidIds.has(String(s.id).trim()),
+        );
+
+        const belum = activeStudents.filter(
+          (s) => !paidIds.has(String(s.id).trim()),
+        );
+
+        setSudahBayar(sudah);
+        setBelumBayar(belum);
+        setTotalNominalRange(total);
       });
 
-      const base =
-        cabang === "Semua"
-          ? siswaAll
-          : siswaAll.filter((s) => s.cabangId === cabang);
+      return () => unsubPayments();
+    });
 
-      setSudahBayar(base.filter((s) => paidIds.has(s.id)));
-      setBelumBayar(base.filter((s) => !paidIds.has(s.id)));
-      setTotalNominalRange(total);
-    }
-
-    loadRangePayment();
-  }, [siswaAll, cabang, fromDate, toDate]);
+    return () => unsubStudents();
+  }, [cabang, appliedMonthKey, cabangNameById]);
 
   // ===================== LOAD MUTASI (payments) saat pilih siswa =====================
   useEffect(() => {
@@ -854,7 +893,7 @@ export default function SiswaByCabangPage() {
               }}
             >
               <Text style={{ fontFamily: F.bold, color: "#1E40AF" }}>
-                Total Masuk (Range Ini)
+                Total Masuk (Periode Dipilih)
               </Text>
 
               <Text
@@ -869,35 +908,40 @@ export default function SiswaByCabangPage() {
               </Text>
             </View>
 
-            <View style={{ marginTop: 12, gap: 10 }}>
-              <Text style={{ fontFamily: F.bold, color: "#0F172A" }}>
-                Pilih Range Tanggal
-              </Text>
-
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                {/* FROM */}
-                <TouchableOpacity
-                  style={styles.selectBox}
-                  onPress={() => setShowFromPicker(true)}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.selectValue}>
-                    Dari: {formatTanggal(fromDate)}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* TO */}
-                <TouchableOpacity
-                  style={styles.selectBox}
-                  onPress={() => setShowToPicker(true)}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.selectValue}>
-                    Sampai: {formatTanggal(toDate)}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity
+                style={[styles.selectBox, { flex: 1 }]}
+                onPress={() => setShowFromPicker(true)}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.selectValue}>
+                  Bulan: {bulanIndo(fromDate)}
+                </Text>
+              </TouchableOpacity>
             </View>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={applyMonthFilter}
+              style={{
+                marginTop: 12,
+                backgroundColor: "#2563EB",
+                borderRadius: 16,
+                paddingVertical: 14,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text
+                style={{
+                  color: "#FFFFFF",
+                  fontFamily: F.extrabold,
+                  fontSize: 14,
+                }}
+              >
+                Terapkan
+              </Text>
+            </TouchableOpacity>
 
             {/* ===== TAB TERBAYAR / BELUM ===== */}
             <View style={styles.segmentWrap}>
@@ -1299,21 +1343,7 @@ export default function SiswaByCabangPage() {
             setShowFromPicker(false);
             if (selectedDate) {
               setFromDate(selectedDate);
-            }
-          }}
-        />
-      )}
-
-      {/* TO DATE PICKER */}
-      {showToPicker && (
-        <DateTimePicker
-          value={toDate}
-          mode="date"
-          display="default"
-          onChange={(event, selectedDate) => {
-            setShowToPicker(false);
-            if (selectedDate) {
-              setToDate(selectedDate);
+              setSelectedMonthKey(monthKeyFromDate(selectedDate));
             }
           }}
         />

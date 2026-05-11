@@ -646,10 +646,11 @@ export default function BayarSPP() {
   const monthOptions = useMemo(() => {
     const months = [];
 
-    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    // ✅ MULAI DARI JANUARI TAHUN SEKARANG
+    const start = new Date(today.getFullYear(), 0, 1);
 
-    for (let i = 0; i < 60; i++) {
-      // 5 tahun ke depan
+    // ✅ 24 BULAN (2 tahun)
+    for (let i = 0; i < 24; i++) {
       const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
 
       months.push({
