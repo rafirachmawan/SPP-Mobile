@@ -1496,8 +1496,11 @@ export default function BayarSPP() {
 
         const alreadyPaid: string[] = [];
         invSnaps.forEach((snap, i) => {
-          if (snap.exists()) alreadyPaid.push(invRefs[i].mk);
+          if (snap.exists() && (snap.data() as any).status === "PAID") {
+            alreadyPaid.push(invRefs[i].mk);
+          }
         });
+
         if (alreadyPaid.length) {
           throw new Error(
             `Bulan ini sudah pernah dibayar: ${alreadyPaid.join(", ")}`,
@@ -1719,7 +1722,7 @@ export default function BayarSPP() {
             voucherManual: row.manual,
             totalVoucher: row.spinUsed + row.manual,
 
-            totalDibayar: row.total,
+            totalDibayar: row.nominal,
 
             voucherSpinDetail:
               row.spinEarned > 0

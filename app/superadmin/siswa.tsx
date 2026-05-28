@@ -123,7 +123,20 @@ function parseRupiah(value: string) {
   return Number(clean) || 0;
 }
 
+function rupiah(n: number) {
+  return "Rp " + Number(n || 0).toLocaleString("id-ID");
+}
+
 export default function SiswaByCabangPage() {
+  // ---------- KPI STATE ----------
+  const [summary, setSummary] = useState({
+    totalMasuk: 0, // total nominal masuk bulan ini
+    bayar: 0,      // siswa yang sudah bayar
+    belum: 0,     // siswa belum bayar
+    totalSiswa: 0, // total siswa aktif
+  });
+  const [loadingKpi, setLoadingKpi] = useState(true);
+
   const insets = useSafeAreaInsets();
   const tabH = useBottomTabBarHeight();
 
@@ -549,24 +562,32 @@ export default function SiswaByCabangPage() {
   }, [siswaAll, cabang, q]);
 
   // ================= HITUNG SUDAH / BELUM BAYAR =================
+  // ✅ Samakan logika dengan admin/index.tsx: pakai paidAt range + active==true
   useEffect(() => {
+
+    // ✅ Query siswa: pakai where("active","==",true) sama seperti admin
     const qStudents =
       cabang === "Semua"
-        ? query(collection(db, "students"))
-        : query(collection(db, "students"), where("branchId", "==", cabang));
+        ? query(collection(db, "students"), where("active", "==", true))
+        : query(collection(db, "students"), where("branchId", "==", cabang), where("active", "==", true));
+
+    // ✅ Query payments: pakai paidAt range (sama seperti admin), BUKAN monthKey
+    const [yyyy, mm] = appliedMonthKey.split("-").map(Number);
+    const startOfMonth = new Date(yyyy, mm - 1, 1, 0, 0, 0, 0);
+    const endOfMonth = new Date(yyyy, mm, 0, 23, 59, 59, 999);
 
     const qPayments =
       cabang === "Semua"
         ? query(
             collection(db, "payments"),
-            where("monthKey", "==", appliedMonthKey),
-            limit(1000),
+            where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
+            where("paidAt", "<=", Timestamp.fromDate(endOfMonth)),
           )
         : query(
             collection(db, "payments"),
             where("branchId", "==", cabang),
-            where("monthKey", "==", appliedMonthKey),
-            limit(1000),
+            where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
+            where("paidAt", "<=", Timestamp.fromDate(endOfMonth)),
           );
 
     const unsubStudents = onSnapshot(qStudents, (studentSnap) => {
@@ -596,20 +617,29 @@ export default function SiswaByCabangPage() {
         paySnap.docs.forEach((d) => {
           const data = d.data() as any;
 
-          if (data.studentId) {
-            paidIds.add(String(data.studentId).trim());
-          }
+          // ✅ Sama seperti admin: pakai totalBayar || 0
+          const nom = Number(data.totalBayar || 0);
+          const sid = String(data.studentId || "").trim();
 
-          total += Number(data.totalBayar ?? data.dibayar ?? data.total ?? 0);
+          total += nom;
+          if (sid) paidIds.add(sid);
         });
 
         const sudah = activeStudents.filter((s) =>
           paidIds.has(String(s.id).trim()),
         );
-
         const belum = activeStudents.filter(
           (s) => !paidIds.has(String(s.id).trim()),
         );
+
+        // Update KPI summary
+        setSummary({
+          totalMasuk: total,
+          bayar: sudah.length,
+          belum: belum.length,
+          totalSiswa: activeStudents.length,
+        });
+        setLoadingKpi(false);
 
         setSudahBayar(sudah);
         setBelumBayar(belum);
@@ -777,15 +807,13 @@ export default function SiswaByCabangPage() {
                       styles.pickRow,
                       active && {
                         backgroundColor: "#DBEAFE",
-                        borderColor: "#BFDBFE",
+                        borderColor: "#93C5FD",
                       },
                     ]}
                     onPress={() => {
                       setCabang(c.id);
-                      setSelected(null);
-                      setHistory([]);
                       setCabangPickerOpen(false);
-                      setCabangPickerSearch("");
+                      setSelected(null);
                     }}
                   >
                     <Text
@@ -1352,6 +1380,35 @@ export default function SiswaByCabangPage() {
   );
 }
 
+// ================= KPI BOX COMPONENT =================
+function KpiBox({
+  label,
+  value,
+  loading,
+  money,
+}: {
+  label: string;
+  value: any;
+  loading: boolean;
+  money?: boolean;
+}) {
+  return (
+    <View style={styles.kpiBox}>
+      <Text style={styles.kpiSmallLabel}>{label}</Text>
+      {loading ? (
+        <ActivityIndicator size="small" />
+      ) : (
+        <Text
+          style={[styles.kpiSmallValue, money && { fontSize: 15 }]}
+          numberOfLines={1}
+        >
+          {value}
+        </Text>
+      )}
+    </View>
+  );
+}
+
 function Header({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <View>
@@ -1370,6 +1427,48 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
 // ✅ styles kamu biarkan sama persis + tambah style dropdown/modal (tidak mengubah yang lain)
 const styles = StyleSheet.create({
   scroll: { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 24, gap: 12 },
+
+  // ===== KPI STYLES =====
+  kpiMain: {
+    backgroundColor: "#0EA5E9",
+    borderRadius: 20,
+    padding: 16,
+  },
+  kpiLabel: {
+    fontFamily: F.semibold,
+    fontSize: 12,
+    color: "#E0F2FE",
+  },
+  kpiValue: {
+    marginTop: 8,
+    fontFamily: F.extrabold,
+    fontSize: 26,
+    color: "#FFFFFF",
+  },
+  kpiGrid: {
+    flexDirection: "row" as const,
+    flexWrap: "wrap" as const,
+    gap: 8,
+  },
+  kpiBox: {
+    width: "48.6%",
+    backgroundColor: "rgba(255,255,255,0.92)",
+    borderRadius: 16,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "rgba(226,232,240,0.95)",
+  },
+  kpiSmallLabel: {
+    fontFamily: F.semibold,
+    fontSize: 12,
+    color: "#64748B",
+  },
+  kpiSmallValue: {
+    marginTop: 6,
+    fontFamily: F.extrabold,
+    fontSize: 18,
+    color: "#0F172A",
+  },
 
   header: {
     paddingHorizontal: 4,
