@@ -19,6 +19,7 @@ import {
   collection,
   doc,
   getDoc,
+  limit,
   onSnapshot,
   query,
   Timestamp,
@@ -117,30 +118,19 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  /* ===== STATS (TIDAK DIUBAH) ===== */
+  /* ===== STATS ===== */
   const [totalSiswa, setTotalSiswa] = useState(0);
   const [sudahBayarBulanIni, setSudahBayarBulanIni] = useState(0);
+  const [belumBayarBulanIni, setBelumBayarBulanIni] = useState(0);
   const [nominalMasukBulanIni, setNominalMasukBulanIni] = useState(0);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  useEffect(() => {
-    if (!branchId) return;
-    const qRef = query(
-      collection(db, "students"),
-      where("branchId", "==", branchId),
-      where("active", "==", true), // 🔥 TAMBAHAN
-    );
-
-    const unsub = onSnapshot(qRef, (snap) => setTotalSiswa(snap.size));
-    return () => unsub();
-  }, [branchId]);
-
+  // ✅ Nominal masuk bulan ini (dari paidAt range)
   useEffect(() => {
     if (!branchId) return;
 
     setStatsLoading(true);
 
-    // ✅ Ambil awal bulan
     const now = new Date();
     const startOfMonth = new Date(
       now.getFullYear(),
@@ -151,7 +141,6 @@ export default function AdminDashboard() {
       0,
       0,
     );
-
     const endOfNow = new Date();
 
     const qRef = query(
@@ -163,24 +152,67 @@ export default function AdminDashboard() {
 
     const unsub = onSnapshot(qRef, (snap) => {
       let totalNominal = 0;
-      const uniq = new Set<string>();
-
       snap.docs.forEach((d) => {
         const data = d.data() as any;
-
-        const total = Number(data.totalBayar || 0);
-        const sid = String(data.studentId || "").trim();
-
-        totalNominal += total;
-        if (sid) uniq.add(sid);
+        totalNominal += Number(data.totalBayar || 0);
       });
-
-      setSudahBayarBulanIni(uniq.size);
       setNominalMasukBulanIni(totalNominal);
       setStatsLoading(false);
     });
 
     return () => unsub();
+  }, [branchId]);
+
+  // ✅ HITUNG SUDAH / BELUM BAYAR + TOTAL SISWA (SAMA DENGAN RIWAYAT)
+  useEffect(() => {
+    if (!branchId) {
+      setTotalSiswa(0);
+      setSudahBayarBulanIni(0);
+      setBelumBayarBulanIni(0);
+      return;
+    }
+
+    const now = new Date();
+    const currentMonthKey = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+
+    // 🔥 ambil semua siswa cabang ini
+    const qStudents = query(
+      collection(db, "students"),
+      where("branchId", "==", branchId),
+    );
+
+    // 🔥 ambil pembayaran bulan ini berdasarkan monthKey (SAMA dengan riwayat)
+    const qPayments = query(
+      collection(db, "payments"),
+      where("branchId", "==", branchId),
+      where("monthKey", "==", currentMonthKey),
+      limit(500),
+    );
+
+    const unsubStudents = onSnapshot(qStudents, (studentSnap) => {
+      const activeStudents = studentSnap.docs.filter(
+        (d) => d.data()?.active !== false,
+      );
+      const totalActive = activeStudents.length;
+      setTotalSiswa(totalActive);
+
+      const unsubPayments = onSnapshot(qPayments, (paySnap) => {
+        const paidIds = new Set<string>();
+        paySnap.docs.forEach((d) => {
+          const data = d.data() as any;
+          if (data.studentId) {
+            paidIds.add(String(data.studentId));
+          }
+        });
+
+        setSudahBayarBulanIni(paidIds.size);
+        setBelumBayarBulanIni(Math.max(totalActive - paidIds.size, 0));
+      });
+
+      return () => unsubPayments();
+    });
+
+    return () => unsubStudents();
   }, [branchId]);
 
   /* ===== MENU (TIDAK DIUBAH) ===== */
@@ -256,8 +288,17 @@ export default function AdminDashboard() {
         {/* ================= KPI PENDUKUNG ================= */}
         <View style={styles.kpiRow}>
           <View style={styles.kpiSmall}>
-            <Text style={styles.kpiSmallLabel}>Bayar Bulan Ini</Text>
-            <Text style={styles.kpiSmallValue}>{sudahBayarBulanIni}</Text>
+            <Text style={styles.kpiSmallLabel}>Sudah Bayar</Text>
+            <Text style={[styles.kpiSmallValue, { color: "#16A34A" }]}>
+              {sudahBayarBulanIni}
+            </Text>
+          </View>
+
+          <View style={styles.kpiSmall}>
+            <Text style={styles.kpiSmallLabel}>Belum Bayar</Text>
+            <Text style={[styles.kpiSmallValue, { color: "#DC2626" }]}>
+              {belumBayarBulanIni}
+            </Text>
           </View>
 
           <View style={styles.kpiSmall}>

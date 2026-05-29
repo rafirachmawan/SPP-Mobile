@@ -307,52 +307,62 @@ export default function SiswaByCabangPage() {
       // ===============================
       // 1️⃣ UPDATE FIRESTORE
       // ===============================
+      const newMonthLabel = newMonthKey
+        ? monthLabelFromMonthKey(newMonthKey)
+        : editBulan || null;
+
       await updateDoc(doc(db, "payments", editItem.id), {
-        nominal: nominal, // tetap 25.000
-        potongan: potongan, // 5.000
-        dibayar: totalFinal, // 🔥 WAJIB
-        totalBayar: totalFinal, // 🔥 WAJIB
-        total: totalFinal, // optional biar aman
+        nominal: nominal,
+        potongan: potongan,
+        dibayar: totalFinal,
+        totalBayar: totalFinal,
+        total: totalFinal,
         metode: editMetode,
         paidAt: newDate,
+        jam: editJam,
         monthKey: newMonthKey || null,
+        monthLabel: newMonthLabel,
+        jenisPembayaran: editBulan || null,
       });
 
       // ===============================
       // 2️⃣ UPDATE SPREADSHEET (SAMA ADMIN)
       // ===============================
-      const response = await fetch(
-        "https://script.google.com/macros/s/AKfycbzd9hxaNoeHpqPhWyrlZ1NZHf-qtr4VsdK-QOppQni-3KOmE8pbmKQ8STAkcVh03LP0oQ/exec",
-        {
-          method: "POST",
-          redirect: "follow",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
+      try {
+        const response = await fetch(
+          "https://script.google.com/macros/s/AKfycbwZGJdMIwEo_XDW4lDoOxY21t4Qfv5NvoXY8PAKU-Fb7747LAl2x_dmkUp5zR_JJLcrwg/exec",
+          {
+            method: "POST",
+            redirect: "follow",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "upsert",
+              paymentId: editItem.id.trim(),
+              branchName: selected.cabangNama.trim(),
+              tanggal: editTanggal,
+              jam: editJam,
+              jenisPembayaran: editBulan,
+              studentName: selected.name,
+              studentType: selected.tipe,
+              metode: editMetode,
+              nominalSebelumVoucher: nominal,
+              voucherSpin: potongan,
+              voucherManual: 0,
+              totalVoucher: potongan,
+              voucherSpinDetail: "-",
+              totalDibayar: totalFinal,
+            }),
           },
-          body: JSON.stringify({
-            action: "upsert",
-            paymentId: editItem.id.trim(), // tetap pakai doc id
-            branchName: selected.cabangNama.trim(),
-            tanggal: editTanggal,
-            jam: editJam,
-            jenisPembayaran: editBulan,
-            studentName: selected.name,
-            studentType: selected.tipe,
-            metode: editMetode,
-            nominalSebelumVoucher: nominal,
-            voucherSpin: potongan,
-            voucherManual: 0,
-            totalVoucher: potongan,
-            voucherSpinDetail: "-",
-            totalDibayar: totalFinal,
-          }),
-        },
-      );
+        );
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText);
+        if (!response.ok) {
+          console.log("Spreadsheet update gagal:", await response.text());
+        }
+      } catch (sheetErr: any) {
+        console.log("Spreadsheet sync error:", sheetErr?.message);
       }
 
       Alert.alert("Berhasil", "Pembayaran berhasil diperbarui");
@@ -562,36 +572,33 @@ export default function SiswaByCabangPage() {
   }, [siswaAll, cabang, q]);
 
   // ================= HITUNG SUDAH / BELUM BAYAR =================
-  // ✅ Samakan logika dengan admin/index.tsx: pakai paidAt range + active==true
+  // ✅ Samakan logika dengan admin/riwayat.tsx: pakai monthKey + active students
   useEffect(() => {
 
-    // ✅ Query siswa: pakai where("active","==",true) sama seperti admin
+    // ✅ Query siswa: ambil semua siswa cabang, filter active client-side (SAMA dengan riwayat)
     const qStudents =
       cabang === "Semua"
-        ? query(collection(db, "students"), where("active", "==", true))
-        : query(collection(db, "students"), where("branchId", "==", cabang), where("active", "==", true));
+        ? query(collection(db, "students"))
+        : query(collection(db, "students"), where("branchId", "==", cabang));
 
-    // ✅ Query payments: pakai paidAt range (sama seperti admin), BUKAN monthKey
-    const [yyyy, mm] = appliedMonthKey.split("-").map(Number);
-    const startOfMonth = new Date(yyyy, mm - 1, 1, 0, 0, 0, 0);
-    const endOfMonth = new Date(yyyy, mm, 0, 23, 59, 59, 999);
-
+    // ✅ Query payments: pakai monthKey (SAMA dengan riwayat)
     const qPayments =
       cabang === "Semua"
         ? query(
             collection(db, "payments"),
-            where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
-            where("paidAt", "<=", Timestamp.fromDate(endOfMonth)),
+            where("monthKey", "==", appliedMonthKey),
+            limit(500),
           )
         : query(
             collection(db, "payments"),
             where("branchId", "==", cabang),
-            where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
-            where("paidAt", "<=", Timestamp.fromDate(endOfMonth)),
+            where("monthKey", "==", appliedMonthKey),
+            limit(500),
           );
 
     const unsubStudents = onSnapshot(qStudents, (studentSnap) => {
       const activeStudents: Student[] = studentSnap.docs
+        .filter((d) => d.data()?.active !== false)
         .map((d) => {
           const data = d.data() as any;
 
@@ -607,8 +614,7 @@ export default function SiswaByCabangPage() {
               Number(data.sppDefault ?? data.spp ?? data.nominalSpp ?? 0) || 0,
             active: data.active !== false,
           };
-        })
-        .filter((s) => s.active !== false);
+        });
 
       const unsubPayments = onSnapshot(qPayments, (paySnap) => {
         const paidIds = new Set<string>();
@@ -617,14 +623,19 @@ export default function SiswaByCabangPage() {
         paySnap.docs.forEach((d) => {
           const data = d.data() as any;
 
-          // ✅ Sama seperti admin: pakai totalBayar || 0
-          const nom = Number(data.totalBayar || 0);
-          const sid = String(data.studentId || "").trim();
-
-          total += nom;
-          if (sid) paidIds.add(sid);
+          // ✅ Sama seperti riwayat
+          if (data.studentId) {
+            paidIds.add(String(data.studentId));
+          }
+          total += Number(data.totalBayar || 0);
         });
 
+        // ✅ HITUNG SAMA PERSIS DENGAN RIWAYAT:
+        // sudahBayarCount = paidIds.size
+        // belumBayarCount = Math.max(totalStudents - paidIds.size, 0)
+        const totalStudents = activeStudents.length;
+
+        // List siswa untuk tampilan tab terbayar/belum
         const sudah = activeStudents.filter((s) =>
           paidIds.has(String(s.id).trim()),
         );
@@ -632,12 +643,12 @@ export default function SiswaByCabangPage() {
           (s) => !paidIds.has(String(s.id).trim()),
         );
 
-        // Update KPI summary
+        // Update KPI summary (pakai paidIds.size, BUKAN sudah.length)
         setSummary({
           totalMasuk: total,
-          bayar: sudah.length,
-          belum: belum.length,
-          totalSiswa: activeStudents.length,
+          bayar: paidIds.size,
+          belum: Math.max(totalStudents - paidIds.size, 0),
+          totalSiswa: totalStudents,
         });
         setLoadingKpi(false);
 
