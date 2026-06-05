@@ -24,6 +24,7 @@ import {
 
 // ✅ Firebase
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as FileSystem from "expo-file-system";
 import {
   collection,
   deleteDoc,
@@ -452,6 +453,61 @@ export default function SiswaByCabangPage() {
   function closePreview() {
     setPreviewOpen(false);
     setPreviewItem(null);
+  }
+
+  // ===================== EXPORT EXCEL (CSV) =====================
+  async function handleExportExcel() {
+    try {
+      const dataToExport = filterMode === "terbayar" ? sudahBayar : belumBayar;
+      if (dataToExport.length === 0) {
+        Alert.alert("Kosong", "Tidak ada data siswa untuk di-export.");
+        return;
+      }
+
+      let csvContent = "Nama,Unit,Tipe,Spp,Status\n";
+      dataToExport.forEach((s) => {
+        const cleanName = s.name.replace(/"/g, '""');
+        const cleanUnit = s.cabangNama.replace(/"/g, '""');
+        const status = filterMode === "terbayar" ? "Terbayar" : "Belum Bayar";
+        csvContent += `"${cleanName}","${cleanUnit}","${s.tipe}","${s.spp}","${status}"\n`;
+      });
+
+      const fileName = `Export_Siswa_${filterMode}_${Date.now()}.csv`;
+
+      if (Platform.OS === "web") {
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else if (Platform.OS === "android") {
+        const SAF = (FileSystem as any).StorageAccessFramework;
+        const permissions = await SAF.requestDirectoryPermissionsAsync();
+        if (permissions.granted) {
+          const uri = await SAF.createFileAsync(
+            permissions.directoryUri,
+            fileName,
+            "text/csv",
+          );
+          await (FileSystem as any).writeAsStringAsync(uri, csvContent, {
+            encoding: (FileSystem as any).EncodingType.UTF8,
+          });
+          Alert.alert("Berhasil", "Data berhasil di-export sebagai file CSV (bisa dibuka di Excel).");
+        } else {
+          Alert.alert("Gagal", "Izin akses folder ditolak.");
+        }
+      } else {
+        Alert.alert(
+          "Info",
+          "Fitur simpan file langsung saat ini hanya didukung di versi Web dan Android."
+        );
+      }
+    } catch (error: any) {
+      console.log(error);
+      Alert.alert("Error", error?.message || "Gagal meng-export data.");
+    }
   }
 
   // ===================== LOAD CABANG (branches) =====================
@@ -959,28 +1015,56 @@ export default function SiswaByCabangPage() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={applyMonthFilter}
-              style={{
-                marginTop: 12,
-                backgroundColor: "#2563EB",
-                borderRadius: 16,
-                paddingVertical: 14,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={applyMonthFilter}
                 style={{
-                  color: "#FFFFFF",
-                  fontFamily: F.extrabold,
-                  fontSize: 14,
+                  flex: 1,
+                  backgroundColor: "#2563EB",
+                  borderRadius: 16,
+                  paddingVertical: 14,
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                Terapkan
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={{
+                    color: "#FFFFFF",
+                    fontFamily: F.extrabold,
+                    fontSize: 14,
+                  }}
+                >
+                  Terapkan
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={handleExportExcel}
+                style={{
+                  flex: 1,
+                  backgroundColor: "#10B981",
+                  borderRadius: 16,
+                  paddingVertical: 14,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "row",
+                  gap: 6
+                }}
+              >
+                <Ionicons name="download-outline" size={18} color="#FFFFFF" />
+                <Text
+                  style={{
+                    color: "#FFFFFF",
+                    fontFamily: F.extrabold,
+                    fontSize: 14,
+                  }}
+                >
+                  Export Excel
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             {/* ===== TAB TERBAYAR / BELUM ===== */}
             <View style={styles.segmentWrap}>

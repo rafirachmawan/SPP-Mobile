@@ -67,6 +67,7 @@ export default function SuperadminDashboard() {
     admin: 0,
     siswa: 0,
     bayarBulanIniNominal: 0,
+    emptyQuotaBranches: [] as string[],
   });
   const [loading, setLoading] = useState(true);
 
@@ -78,6 +79,10 @@ export default function SuperadminDashboard() {
 
         // ================= TOTAL UNIT =================
         const branchSnap = await getDocs(collection(db, "branches"));
+        const branchesMap = new Map();
+        branchSnap.docs.forEach((d) =>
+          branchesMap.set(d.id, (d.data() as any).name || "Unit"),
+        );
 
         // ================= TOTAL ADMIN =================
         const adminSnap = await getDocs(collection(db, "branch_admins"));
@@ -116,11 +121,30 @@ export default function SuperadminDashboard() {
           total += Number(data.totalBayar || 0);
         });
 
+        // ================= KUOTA SPIN =================
+        const spinKuotaSnap = await getDocs(collection(db, "spin_kuota"));
+        let emptyBranches: string[] = [];
+        spinKuotaSnap.docs.forEach((d) => {
+          const data = d.data() as any;
+          if (Array.isArray(data.kuota)) {
+            const hasEmpty = data.kuota.some(
+              (k: any) => k.kuota === 0 && k.kuotaAwal > 0,
+            );
+            if (hasEmpty) {
+              const bName = branchesMap.get(d.id) || "Unit";
+              if (!emptyBranches.includes(bName)) {
+                emptyBranches.push(bName);
+              }
+            }
+          }
+        });
+
         setSummary({
           cabang: branchSnap.size,
           admin: adminCount,
           siswa: studentSnap.size,
           bayarBulanIniNominal: total,
+          emptyQuotaBranches: emptyBranches,
         });
       } catch (err) {
         console.log("Load dashboard error:", err);
@@ -162,6 +186,24 @@ export default function SuperadminDashboard() {
             <Text style={styles.roleText}>Superadmin</Text>
           </View>
         </View>
+
+        {/* ================= NOTIFIKASI KUOTA HABIS ================= */}
+        {!loading && summary.emptyQuotaBranches.length > 0 && (
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={styles.warningAlert}
+            onPress={() => router.push("/superadmin/spin")}
+          >
+            <Ionicons name="warning" size={24} color="#B45309" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.warningTitle}>Kuota Hadiah Habis!</Text>
+              <Text style={styles.warningSub}>
+                {summary.emptyQuotaBranches.length} Unit kehabisan kuota hadiah spin: {summary.emptyQuotaBranches.join(", ")}. Tap untuk mengatur.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#B45309" />
+          </TouchableOpacity>
+        )}
 
         {/* ================= KPI UTAMA ================= */}
         <View style={styles.kpiMain}>
@@ -428,5 +470,28 @@ const styles = StyleSheet.create({
     fontFamily: F.bold,
     fontSize: 13,
     color: "#0F172A",
+  },
+
+  warningAlert: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FEF3C7",
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  warningTitle: {
+    fontFamily: F.bold,
+    fontSize: 14,
+    color: "#B45309",
+    marginBottom: 2,
+  },
+  warningSub: {
+    fontFamily: F.regular,
+    fontSize: 12,
+    color: "#92400E",
+    lineHeight: 18,
   },
 });
