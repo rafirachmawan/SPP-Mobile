@@ -1667,10 +1667,10 @@ export default function BayarSPP() {
             mk,
             label: labelMk,
             nominal,
-            spinUsed: spin, // potongan bulan ini
+            spinUsed: voucherSpin, // potongan bulan ini
             spinEarned, // voucher bulan depan
-            manual,
-            total,
+            manual: voucherManual,
+            total: totalBayar,
           });
         }
 
@@ -1718,11 +1718,11 @@ export default function BayarSPP() {
             metode: invoiceDraft.metode,
 
             nominalSebelumVoucher: row.nominal,
-            voucherSpin: row.spinEarned,
+            voucherSpin: row.spinUsed,
             voucherManual: row.manual,
             totalVoucher: row.spinUsed + row.manual,
 
-            totalDibayar: row.nominal,
+            totalDibayar: row.total,
 
             voucherSpinDetail:
               row.spinEarned > 0

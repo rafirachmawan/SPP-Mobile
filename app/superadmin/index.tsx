@@ -15,6 +15,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
 import {
   SafeAreaView,
@@ -26,6 +27,8 @@ import { db } from "../../firebase"; // ⬅ WAJIB ADA
 // ✅ Firebase
 import {
   collection,
+  doc,
+  getDoc,
   getDocs,
   query,
   Timestamp,
@@ -50,6 +53,12 @@ function pad2(n: number) {
 function monthKeyOf(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
+function formatTanggalOnly(d: Date) {
+  return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
+}
+function formatJamOnly(d: Date) {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
 function rupiah(n: number) {
   return "Rp " + Number(n || 0).toLocaleString("id-ID");
 }
@@ -61,15 +70,100 @@ export default function SuperadminDashboard() {
 
   const mkNow = useMemo(() => monthKeyOf(new Date()), []);
 
-  // ================= STATE =================
   const [summary, setSummary] = useState({
     cabang: 0,
     admin: 0,
     siswa: 0,
     bayarBulanIniNominal: 0,
-    emptyQuotaBranches: [] as string[],
+    emptyQuotaDetails: [] as string[],
   });
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState("");
+
+  async function syncToSpreadsheet() {
+    Alert.alert(
+      "Konfirmasi Sync",
+      "Apakah Anda yakin ingin mengirim ulang SELURUH riwayat pembayaran yang LUNAS ke Spreadsheet?\n\nPERHATIAN: Jika Spreadsheet Anda tidak otomatis menimpa (update) berdasarkan Invoice No, data ini akan menjadi ganda (dobel). Sangat disarankan untuk MENGHAPUS data/baris lama di Spreadsheet terlebih dahulu sebelum melakukan Sync ini.",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Ya, Sync Sekarang",
+          onPress: async () => {
+            try {
+              setSyncing(true);
+              setSyncProgress("Memuat data...");
+              const paySnap = await getDocs(query(collection(db, "payments"), where("status", "==", "PAID")));
+              
+              const docs = paySnap.docs.map(d => d.data() as any);
+              const totalData = docs.length;
+              let success = 0;
+              let fail = 0;
+              let current = 0;
+              
+              if (totalData === 0) {
+                Alert.alert("Info", "Tidak ada data LUNAS untuk disync.");
+                setSyncing(false);
+                setSyncProgress("");
+                return;
+              }
+              
+              for (const p of docs) {
+                current++;
+                setSyncProgress(`Memproses ${current}/${totalData}...`);
+                
+                const payload = {
+                  paymentId: p.invoiceNo,
+                  invoiceNo: p.invoiceNo,
+                  branchId: p.branchId,
+                  branchName: p.branchName,
+                  
+                  tanggal: p.paidAt && p.paidAt.toDate ? formatTanggalOnly(p.paidAt.toDate()) : formatTanggalOnly(new Date()),
+                  jam: p.paidAt && p.paidAt.toDate ? formatJamOnly(p.paidAt.toDate()) : formatJamOnly(new Date()),
+                  
+                  studentName: p.studentName,
+                  studentType: p.studentType,
+                  
+                  jenisPembayaran: p.jenisPembayaran || `SPP ${p.monthLabel || p.monthKey}`,
+                  metode: p.metode,
+                  
+                  nominalSebelumVoucher: p.nominalSebelumVoucher ?? p.nominal ?? 0,
+                  voucherSpin: p.voucherSpin ?? 0,
+                  voucherManual: p.voucherManual ?? 0,
+                  totalVoucher: p.totalVoucher ?? p.potongan ?? 0,
+                  
+                  totalDibayar: p.totalBayar ?? p.total ?? 0,
+                  
+                  voucherSpinDetail: Array.isArray(p.voucherSpinEarned) && p.voucherSpinEarned.length > 0 
+                    ? p.voucherSpinEarned.map((v:any) => `${v.monthKey}: ${v.nominal}`).join(", ")
+                    : "",
+                    
+                  monthKey: p.monthKey,
+                  createdAtIso: p.paidAt && p.paidAt.toDate ? p.paidAt.toDate().toISOString() : new Date().toISOString(),
+                };
+                
+                const res = await fetch("https://script.google.com/macros/s/AKfycbwZGJdMIwEo_XDW4lDoOxY21t4Qfv5NvoXY8PAKU-Fb7747LAl2x_dmkUp5zR_JJLcrwg/exec", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payload),
+                });
+                
+                if (res.ok) success++;
+                else fail++;
+              }
+              
+              Alert.alert("Sync Selesai", `Berhasil: ${success} data\nGagal: ${fail} data`);
+            } catch (e: any) {
+              Alert.alert("Error", e.message || "Terjadi kesalahan saat sync");
+            } finally {
+              setSyncing(false);
+              setSyncProgress("");
+            }
+          }
+        }
+      ]
+    );
+  }
 
   // ================= REALTIME EFFECT =================
   useEffect(() => {
@@ -122,19 +216,27 @@ export default function SuperadminDashboard() {
         });
 
         // ================= KUOTA SPIN =================
+        const globalSpinSnap = await getDoc(doc(db, "spin_settings", "global"));
+        const hadiahMap = new Map();
+        if (globalSpinSnap.exists()) {
+          const tmpl = globalSpinSnap.data()?.hadiahTemplate || [];
+          tmpl.forEach((h: any) => hadiahMap.set(h.id, h.label));
+        }
+
         const spinKuotaSnap = await getDocs(collection(db, "spin_kuota"));
-        let emptyBranches: string[] = [];
+        let emptyDetails: string[] = [];
         spinKuotaSnap.docs.forEach((d) => {
           const data = d.data() as any;
           if (Array.isArray(data.kuota)) {
-            const hasEmpty = data.kuota.some(
+            const emptyItems = data.kuota.filter(
               (k: any) => k.kuota === 0 && k.kuotaAwal > 0,
             );
-            if (hasEmpty) {
+            if (emptyItems.length > 0) {
               const bName = branchesMap.get(d.id) || "Unit";
-              if (!emptyBranches.includes(bName)) {
-                emptyBranches.push(bName);
-              }
+              const emptyLabels = emptyItems
+                .map((k: any) => hadiahMap.get(k.id) || k.id)
+                .join(", ");
+              emptyDetails.push(`${bName} (${emptyLabels})`);
             }
           }
         });
@@ -144,7 +246,7 @@ export default function SuperadminDashboard() {
           admin: adminCount,
           siswa: studentSnap.size,
           bayarBulanIniNominal: total,
-          emptyQuotaBranches: emptyBranches,
+          emptyQuotaDetails: emptyDetails,
         });
       } catch (err) {
         console.log("Load dashboard error:", err);
@@ -188,7 +290,7 @@ export default function SuperadminDashboard() {
         </View>
 
         {/* ================= NOTIFIKASI KUOTA HABIS ================= */}
-        {!loading && summary.emptyQuotaBranches.length > 0 && (
+        {!loading && summary.emptyQuotaDetails.length > 0 && (
           <TouchableOpacity
             activeOpacity={0.9}
             style={styles.warningAlert}
@@ -198,7 +300,9 @@ export default function SuperadminDashboard() {
             <View style={{ flex: 1 }}>
               <Text style={styles.warningTitle}>Kuota Hadiah Habis!</Text>
               <Text style={styles.warningSub}>
-                {summary.emptyQuotaBranches.length} Unit kehabisan kuota hadiah spin: {summary.emptyQuotaBranches.join(", ")}. Tap untuk mengatur.
+                {summary.emptyQuotaDetails.length} Unit kehabisan kuota hadiah spin:{"\n"}
+                {summary.emptyQuotaDetails.join("\n")}
+                {"\n"}Tap di sini untuk mengatur ulang.
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#B45309" />
@@ -258,6 +362,11 @@ export default function SuperadminDashboard() {
             icon="logo-google"
             label="Rekapan SPP"
             onPress={() => Linking.openURL(SPREADSHEET_URL)}
+          />
+          <Action
+            icon="sync-outline"
+            label={syncing ? `Sedang Sync (${syncProgress})` : "Sync Ulang ke Spreadsheet"}
+            onPress={syncing ? () => {} : syncToSpreadsheet}
           />
 
           <TouchableOpacity
