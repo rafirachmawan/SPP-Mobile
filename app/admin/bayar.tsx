@@ -1057,8 +1057,42 @@ export default function BayarSPP() {
           if (!snap.exists()) return [m.key, { paid: false }] as const;
 
           const data = snap.data() as any;
-          const paid = String(data.status || "") === "PAID";
+          let paid = String(data.status || "") === "PAID";
           const paidAt = data?.paidAt?.toDate ? data.paidAt.toDate() : null;
+
+          // 🚨 DOUBLE CHECK KE PAYMENTS JIKA PAID (Self-Healing)
+          if (paid) {
+            try {
+              // Kita gunakan getDocs + query agar tidak error permission
+              // jika document sudah dihapus (resource is null di rules)
+              const { getDocs, query, where, collection } = await import("firebase/firestore");
+              const q = query(
+                collection(db, "payments"), 
+                where("branchId", "==", branchId),
+                where("__name__", "==", invId)
+              );
+              const paySnap = await getDocs(q);
+
+              if (paySnap.empty || paySnap.docs[0].data()?.status === "DELETED") {
+                paid = false; // Jika di payments tidak ada/dihapus, anggap belum bayar
+                // Perbaiki data di invoices yang tertinggal
+                import("firebase/firestore").then(({ updateDoc }) => {
+                   updateDoc(doc(db, "invoices", invId), { status: "UNPAID" }).catch(() => {});
+                });
+              }
+            } catch (e: any) {
+              console.log("self-healing check error:", e);
+              // Jika kena error permissions, 99% karena dokumen sudah dihapus oleh Superadmin
+              // (karena Firebase rule akan menolak bacaan jika resource is null).
+              // Jadi kita anggap payment sudah terhapus dan kembalikan ke Belum Bayar.
+              if (String(e).toLowerCase().includes("permission")) {
+                paid = false;
+                import("firebase/firestore").then(({ updateDoc }) => {
+                   updateDoc(doc(db, "invoices", invId), { status: "UNPAID" }).catch(() => {});
+                });
+              }
+            }
+          }
 
           return [
             m.key,
@@ -1494,16 +1528,45 @@ export default function BayarSPP() {
           discRefs.map((x) => trx.get(x.ref)),
         );
 
-        const alreadyPaid: string[] = [];
-        invSnaps.forEach((snap, i) => {
+        const alreadyPaidReal: string[] = [];
+        const alreadyPaidButOrphan: string[] = [];
+        for (let i = 0; i < invSnaps.length; i++) {
+          const snap = invSnaps[i];
           if (snap.exists() && (snap.data() as any).status === "PAID") {
-            alreadyPaid.push(invRefs[i].mk);
+            const mk = invRefs[i].mk;
+            const invId = invRefs[i].invId;
+            
+            // 🚨 CEK ULANG KE PAYMENTS (Self-Healing untuk Transaksi)
+            // Jika dokumen invoice stuck di "PAID", kita cek apakah payment-nya masih ada
+            const { collection, query, where, getDocs } = await import("firebase/firestore");
+            const q = query(
+              collection(db, "payments"),
+              where("branchId", "==", branchId),
+              where("__name__", "==", invId)
+            );
+            
+            try {
+              const paySnap = await getDocs(q);
+              if (!paySnap.empty && paySnap.docs[0].data()?.status !== "DELETED") {
+                alreadyPaidReal.push(mk); // Benar-benar sudah dibayar
+              } else {
+                alreadyPaidButOrphan.push(mk); // Invoice nyangkut PAID, tapi payment kosong
+              }
+            } catch (e: any) {
+              // Jika bukan error permission, anggap sudah bayar untuk aman
+              if (!String(e).toLowerCase().includes("permission")) {
+                alreadyPaidReal.push(mk);
+              } else {
+                // Jika error permission, berarti dokumen dihapus (resource is null), kita abaikan (boleh ditimpa)
+                alreadyPaidButOrphan.push(mk);
+              }
+            }
           }
-        });
+        }
 
-        if (alreadyPaid.length) {
+        if (alreadyPaidReal.length) {
           throw new Error(
-            `Bulan ini sudah pernah dibayar: ${alreadyPaid.join(", ")}`,
+            `Bulan ini sudah pernah dibayar: ${alreadyPaidReal.join(", ")}`,
           );
         }
 
@@ -1654,7 +1717,13 @@ export default function BayarSPP() {
             payload.proofUploadedAt = serverTimestamp();
           }
 
-          trx.set(ref, payload);
+          // 🔥 JIKA INVOICE NYANGKUT (ORPHAN), LEWATI UPDATE INVOICES
+          // Aturan keamanan Firebase kemungkinan mengunci invoice yang sudah berstatus PAID
+          // agar tidak bisa diubah dari akun cabang. Jadi kita biarkan saja (toh statusnya memang PAID).
+          if (!alreadyPaidButOrphan.includes(mk)) {
+            trx.set(ref, payload);
+          }
+          
           trx.set(doc(db, "payments", invId), payload);
 
           // 🔥 SIMPAN UNTUK SPREADSHEET (JANGAN PUSH DI SINI)

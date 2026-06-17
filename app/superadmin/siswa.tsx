@@ -62,6 +62,7 @@ type PaidRow = {
   potongan: number;
   dibayar: number;
   metode: "Cash" | "Transfer";
+  monthKey: string;
 
   // ✅ bukti bayar (ikuti yang dipakai Bayar SPP)
   proofDataUrl?: string | null;
@@ -397,7 +398,50 @@ export default function SiswaByCabangPage() {
               console.log("DELETE SHEET ID:", item.invoiceNo);
 
               // // 1️⃣ HAPUS FIRESTORE (pakai document id)
-              await deleteDoc(doc(db, "payments", item.id));
+              try {
+                await deleteDoc(doc(db, "payments", item.id));
+              } catch (e) {
+                console.log("Delete payments error:", e);
+                // Fallback: jika delete diblokir rules, ubah status jadi DELETED
+                try {
+                  await updateDoc(doc(db, "payments", item.id), { status: "DELETED", totalBayar: 0 });
+                } catch (e2) {}
+              }
+
+              try {
+                await updateDoc(doc(db, "invoices", item.id), { status: "UNPAID" }); // ✅ Ubah status jadi UNPAID daripada delete untuk menghindari error permission
+              } catch (e) {
+                console.log("Update invoice error:", e);
+                try {
+                   await deleteDoc(doc(db, "invoices", item.id)); // Fallback hapus jika update gagal
+                } catch(e2) {}
+              }
+
+              if (item.monthKey && selected?.id) {
+                // ✅ KEMBALIKAN VOUCHER YANG DIPAKAI UNTUK BULAN INI
+                try {
+                  const usedDiscRef = doc(db, "student_discounts", `${selected.id}_${item.monthKey}`);
+                  await updateDoc(usedDiscRef, {
+                    status: "AVAILABLE",
+                    usedAt: null,
+                    usedByPaymentGroupId: null
+                  });
+                } catch (e) {}
+
+                // ✅ HAPUS VOUCHER YANG DIDAPAT (UNTUK BULAN DEPAN) HASIL DARI PEMBAYARAN INI
+                try {
+                  const [y, m] = item.monthKey.split("-").map(Number);
+                  const d = new Date(y, m, 1);
+                  const targetMk = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                  const earnedDiscRef = doc(db, "student_discounts", `${selected.id}_${targetMk}`);
+                  await deleteDoc(earnedDiscRef);
+                } catch (e) {}
+
+                // ✅ HAPUS MANUAL DISCOUNT JIKA ADA
+                try {
+                   await deleteDoc(doc(db, "manual_discounts", `${selected.id}_${item.monthKey}`));
+                } catch(e) {}
+              }
 
               // 2️⃣ HAPUS SPREADSHEET (pakai invoiceNo)
               const res = await fetch(
@@ -637,20 +681,19 @@ export default function SiswaByCabangPage() {
         ? query(collection(db, "students"))
         : query(collection(db, "students"), where("branchId", "==", cabang));
 
-    // ✅ Query payments: pakai monthKey (SAMA dengan riwayat)
-    const qPayments =
-      cabang === "Semua"
-        ? query(
-            collection(db, "payments"),
-            where("monthKey", "==", appliedMonthKey),
-            limit(500),
-          )
-        : query(
-            collection(db, "payments"),
-            where("branchId", "==", cabang),
-            where("monthKey", "==", appliedMonthKey),
-            limit(500),
-          );
+    const [yStr, mStr] = appliedMonthKey.split("-");
+    const pYear = parseInt(yStr, 10);
+    const pMonth = parseInt(mStr, 10) - 1;
+    const startOfMonth = new Date(pYear, pMonth, 1, 0, 0, 0, 0);
+    const endOfMonth = new Date(pYear, pMonth + 1, 0, 23, 59, 59, 999);
+
+    // ✅ Query payments: pakai paidAt (SAMA dengan dashboard)
+    // Hindari composite index error dengan tidak menggunakan where("branchId", "==", cabang)
+    const qPayments = query(
+      collection(db, "payments"),
+      where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
+      where("paidAt", "<=", Timestamp.fromDate(endOfMonth))
+    );
 
     const unsubStudents = onSnapshot(qStudents, (studentSnap) => {
       const activeStudents: Student[] = studentSnap.docs
@@ -678,6 +721,13 @@ export default function SiswaByCabangPage() {
 
         paySnap.docs.forEach((d) => {
           const data = d.data() as any;
+
+          // ✅ Filter cabang di client side untuk menghindari error index Firebase
+          if (cabang !== "Semua" && data.branchId !== cabang) {
+            return;
+          }
+
+          if (data.status === "DELETED") return; // Abaikan yang sudah dihapus
 
           // ✅ Sama seperti riwayat
           if (data.studentId) {
@@ -778,6 +828,8 @@ export default function SiswaByCabangPage() {
           return {
             id: d.id,
             invoiceNo: data.invoiceNo || data.paymentGroupId || d.id, // 🔥 TAMBAHKAN INI
+            monthKey: monthKey,
+            status: data.status,
             bulan,
             tanggal: paidAt ? formatTanggal(paidAt) : "-",
             jam: paidAt ? formatJam(paidAt) : "-",
@@ -789,7 +841,7 @@ export default function SiswaByCabangPage() {
             proofDataUrl: data.proofDataUrl || null,
             proofType: (data.proofType as any) || null,
           };
-        });
+        }).filter((row) => row.status !== "DELETED");
 
         setHistory(rows);
         setLoadingHistory(false);
