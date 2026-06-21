@@ -681,18 +681,11 @@ export default function SiswaByCabangPage() {
         ? query(collection(db, "students"))
         : query(collection(db, "students"), where("branchId", "==", cabang));
 
-    const [yStr, mStr] = appliedMonthKey.split("-");
-    const pYear = parseInt(yStr, 10);
-    const pMonth = parseInt(mStr, 10) - 1;
-    const startOfMonth = new Date(pYear, pMonth, 1, 0, 0, 0, 0);
-    const endOfMonth = new Date(pYear, pMonth + 1, 0, 23, 59, 59, 999);
-
-    // ✅ Query payments: pakai paidAt (SAMA dengan dashboard)
+    // ✅ Query payments: pakai monthKey agar sesuai dengan SPP bulan yang dipilih
     // Hindari composite index error dengan tidak menggunakan where("branchId", "==", cabang)
     const qPayments = query(
       collection(db, "payments"),
-      where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
-      where("paidAt", "<=", Timestamp.fromDate(endOfMonth))
+      where("monthKey", "==", appliedMonthKey)
     );
 
     const unsubStudents = onSnapshot(qStudents, (studentSnap) => {
