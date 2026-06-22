@@ -681,11 +681,21 @@ export default function SiswaByCabangPage() {
         ? query(collection(db, "students"))
         : query(collection(db, "students"), where("branchId", "==", cabang));
 
-    // ✅ Query payments: pakai monthKey agar sesuai dengan SPP bulan yang dipilih
-    // Hindari composite index error dengan tidak menggunakan where("branchId", "==", cabang)
-    const qPayments = query(
+    // ✅ Query payments untuk TERBAYAR/BELUM: pakai monthKey agar sesuai dengan SPP bulan yang dipilih
+    const qPaymentsMonthKey = query(
       collection(db, "payments"),
       where("monthKey", "==", appliedMonthKey)
+    );
+
+    // ✅ Query payments untuk TOTAL MASUK: pakai paidAt (seperti dashboard utama)
+    const [y, m] = appliedMonthKey.split("-");
+    const startOfMonth = new Date(Number(y), Number(m) - 1, 1, 0, 0, 0, 0);
+    const endOfMonth = new Date(Number(y), Number(m), 0, 23, 59, 59, 999);
+
+    const qPaymentsPaidAt = query(
+      collection(db, "payments"),
+      where("paidAt", ">=", Timestamp.fromDate(startOfMonth)),
+      where("paidAt", "<=", Timestamp.fromDate(endOfMonth))
     );
 
     const unsubStudents = onSnapshot(qStudents, (studentSnap) => {
@@ -708,9 +718,36 @@ export default function SiswaByCabangPage() {
           };
         });
 
-      const unsubPayments = onSnapshot(qPayments, (paySnap) => {
+      let currentTotal = 0;
+      let currentPaidIds = new Set<string>();
+
+      const updateUI = () => {
+        const totalStudents = activeStudents.length;
+
+        // List siswa untuk tampilan tab terbayar/belum
+        const sudah = activeStudents.filter((s) =>
+          currentPaidIds.has(String(s.id).trim()),
+        );
+        const belum = activeStudents.filter(
+          (s) => !currentPaidIds.has(String(s.id).trim()),
+        );
+
+        // Update KPI summary (pakai currentPaidIds.size, BUKAN sudah.length)
+        setSummary({
+          totalMasuk: currentTotal,
+          bayar: currentPaidIds.size,
+          belum: Math.max(totalStudents - currentPaidIds.size, 0),
+          totalSiswa: totalStudents,
+        });
+        setLoadingKpi(false);
+
+        setSudahBayar(sudah);
+        setBelumBayar(belum);
+        setTotalNominalRange(currentTotal);
+      };
+
+      const unsubPaymentsMonthKey = onSnapshot(qPaymentsMonthKey, (paySnap) => {
         const paidIds = new Set<string>();
-        let total = 0;
 
         paySnap.docs.forEach((d) => {
           const data = d.data() as any;
@@ -726,37 +763,35 @@ export default function SiswaByCabangPage() {
           if (data.studentId) {
             paidIds.add(String(data.studentId));
           }
+        });
+        
+        currentPaidIds = paidIds;
+        updateUI();
+      });
+
+      const unsubPaymentsPaidAt = onSnapshot(qPaymentsPaidAt, (paySnap) => {
+        let total = 0;
+        paySnap.docs.forEach((d) => {
+          const data = d.data() as any;
+
+          // ✅ Filter cabang di client side
+          if (cabang !== "Semua" && data.branchId !== cabang) {
+            return;
+          }
+
+          if (data.status === "DELETED") return; // Abaikan yang sudah dihapus
+          
           total += Number(data.totalBayar || 0);
         });
 
-        // ✅ HITUNG SAMA PERSIS DENGAN RIWAYAT:
-        // sudahBayarCount = paidIds.size
-        // belumBayarCount = Math.max(totalStudents - paidIds.size, 0)
-        const totalStudents = activeStudents.length;
-
-        // List siswa untuk tampilan tab terbayar/belum
-        const sudah = activeStudents.filter((s) =>
-          paidIds.has(String(s.id).trim()),
-        );
-        const belum = activeStudents.filter(
-          (s) => !paidIds.has(String(s.id).trim()),
-        );
-
-        // Update KPI summary (pakai paidIds.size, BUKAN sudah.length)
-        setSummary({
-          totalMasuk: total,
-          bayar: paidIds.size,
-          belum: Math.max(totalStudents - paidIds.size, 0),
-          totalSiswa: totalStudents,
-        });
-        setLoadingKpi(false);
-
-        setSudahBayar(sudah);
-        setBelumBayar(belum);
-        setTotalNominalRange(total);
+        currentTotal = total;
+        updateUI();
       });
 
-      return () => unsubPayments();
+      return () => {
+        unsubPaymentsMonthKey();
+        unsubPaymentsPaidAt();
+      };
     });
 
     return () => unsubStudents();
