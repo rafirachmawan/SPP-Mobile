@@ -943,6 +943,21 @@ export default function BayarSPP() {
         spinByMonth[mk] = spinPot; // tetap simpan spin
         potonganTotal += totalPot; // ✅ FIX
       });
+
+      // ✅ FIX DEADLOCK: Cek juga voucher untuk bulan target berikutnya (nextMonthKey) jika sudah pernah dibuat di Firestore
+      const targetMonthKeys = monthKeys.map((mk) => nextMonthKey(mk));
+      const targetSpinSnaps = await Promise.all(
+        targetMonthKeys.map((tmk) =>
+          getDoc(doc(db, "student_discounts", `${s.id}_${tmk}`)),
+        ),
+      );
+
+      targetSpinSnaps.forEach((targetSnap, idx) => {
+        const tmk = targetMonthKeys[idx];
+        if (targetSnap.exists()) {
+          spinByMonth[tmk] = Math.max(Number(targetSnap.data()?.nominal || 0), 0);
+        }
+      });
     } catch (e) {
       console.log("❌ GAGAL LOAD DISCOUNT:", e);
 
@@ -1324,17 +1339,13 @@ export default function BayarSPP() {
           kuotaMap[k.id] = { ...k };
         });
 
-        // ===================== CEK SUDAH PERNAH SPIN =====================
+        // ===================== TARGET DISCOUNT REF =====================
         const discountRef = doc(
           db,
           "student_discounts",
           `${selected.id}_${currentMk}`,
         );
-        const discountSnap = await trx.get(discountRef);
-
-        if (discountSnap.exists()) {
-          throw new Error("Voucher bulan ini sudah ada");
-        }
+        // ✅ ALLOW OVERWRITE: Jika voucher sudah ada di Firestore, spin tetap dijalankan dan akan MENIMPA (overwrite) voucher lama.
 
         // ===================== MERGE HADIAH + KUOTA =====================
         const merged = hadiahTemplate.map((h: any) => {
