@@ -944,20 +944,12 @@ export default function BayarSPP() {
         potonganTotal += totalPot; // ✅ FIX
       });
 
-      // ✅ FIX DEADLOCK: Cek juga voucher untuk bulan target berikutnya (nextMonthKey) jika sudah pernah dibuat di Firestore
-      const targetMonthKeys = monthKeys.map((mk) => nextMonthKey(mk));
-      const targetSpinSnaps = await Promise.all(
-        targetMonthKeys.map((tmk) =>
-          getDoc(doc(db, "student_discounts", `${s.id}_${tmk}`)),
-        ),
-      );
-
-      targetSpinSnaps.forEach((targetSnap, idx) => {
-        const tmk = targetMonthKeys[idx];
-        if (targetSnap.exists()) {
-          spinByMonth[tmk] = Math.max(Number(targetSnap.data()?.nominal || 0), 0);
-        }
-      });
+      // ✅ FIX: TIDAK pre-fetch voucher bulan depan (nextMonthKey) dari Firestore.
+      // Voucher target bulan depan hanya diisi saat admin benar-benar memutar Spin
+      // pada sesi ini (via spinNext → applySpinResultToDraft).
+      // Pre-fetch sebelumnya menyebabkan spinByMonth[bulanDepan] terisi dari dokumen
+      // Firestore lama (sisa sesi yang dibatalkan), sehingga sistem salah menganggap
+      // spin sudah dilakukan dan mengunci tombol Spin.
     } catch (e) {
       console.log("❌ GAGAL LOAD DISCOUNT:", e);
 
